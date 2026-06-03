@@ -1,0 +1,29 @@
+{
+  "name": "@cbaileydev/part-interchange-mcp",
+  "version": "0.1.0",
+  "description": "MCP server scaffold for cross-referencing OEM and aftermarket part numbers. Requires a data provider (not wired by default).",
+  "type": "module",
+  "bin": {
+    "part-interchange-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
