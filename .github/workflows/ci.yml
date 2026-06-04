@@ -33,6 +33,7 @@ jobs:
           - automotive-unit-converter
           - automotive-electrical
           - engine-build-math
+          - towing-payload-math
     defaults:
       run:
         working-directory: servers/${{ matrix.server }}
