@@ -1,12 +1,17 @@
 /**
  * Diagnostic Trouble Code (DTC) parsing and STRUCTURAL decode.
  *
- * This module decodes only the structure of a DTC string as defined by the
- * public OBD-II / SAE J2012 code format (system letter, generic vs
- * manufacturer digit, subsystem digit). It deliberately does NOT ship a
- * description table: the human-readable meaning of a specific code is
- * proprietary, so `description` stays undefined unless a caller supplies one.
+ * This module decodes the structure of a DTC string as defined by the public
+ * OBD-II / SAE J2012 code format (system letter, generic vs manufacturer digit,
+ * subsystem digit). It additionally attaches the standardized definition for a
+ * common GENERIC code (see ./dtc-definitions.ts) — those meanings are a public
+ * SAE/ISO standard, identical across makes. It ships NO meanings for
+ * MANUFACTURER-specific codes (P1xxx, etc.), whose definitions are proprietary
+ * and vary by make; for those — and for uncommon generic codes not in the
+ * bundled set — `genericDescription` is null and the caller-supplied
+ * `description` remains the only human meaning.
  */
+import { lookupGenericDtcDefinition } from "./dtc-definitions.js";
 
 /** A normalized DTC observation, with optional caller-supplied description. */
 export type DtcRecord = {
@@ -34,6 +39,14 @@ export type DtcStructure = {
    * reflects the general system area from the letter alone. Always set.
    */
   subsystemArea: string;
+  /**
+   * Standardized human-readable meaning for a COMMON GENERIC code (public
+   * SAE J2012 / ISO 15031 definition). `null` when the code is not in the
+   * bundled common-generic set — i.e. a manufacturer-specific code or an
+   * uncommon generic one — in which case the meaning must be looked up in a
+   * service database, never guessed.
+   */
+  genericDescription: string | null;
 };
 
 /** Standard OBD-II DTC format: letter + 4 hex-ish chars (case-insensitive). */
@@ -116,5 +129,5 @@ export function decodeDtcStructure(code: string): DtcStructure {
       ? P_CODE_SUBSYSTEM_AREA[subsystem] ?? "powertrain (unassigned range)"
       : NON_P_SUBSYSTEM_AREA[normalized[0]] ?? "unclassified system";
 
-  return { system, codeType, subsystem, subsystemArea };
+  return { system, codeType, subsystem, subsystemArea, genericDescription: lookupGenericDtcDefinition(normalized) };
 }

@@ -194,7 +194,7 @@ export function registerObdTools(server: ToolRegistrar): void {
     {
       title: "Read DTCs",
       description:
-        "Read stored/pending DTCs from the current session, each with a structural decode (system letter, generic vs manufacturer, subsystem). Descriptions are not bundled. Requires a session.",
+        "Read stored/pending DTCs from the current session, each with a structural decode (system letter, generic vs manufacturer, subsystem) plus a standardized definition for common generic codes (structure.genericDescription). genericDescription is null for manufacturer-specific and uncommon codes — look those up rather than guessing. Requires a session.",
       inputSchema: {},
       annotations: READ_ONLY
     },
@@ -262,7 +262,7 @@ export function registerObdTools(server: ToolRegistrar): void {
     {
       title: "Ingest Scan Log",
       description:
-        "Parse a user-supplied scan log (CSV or 'key: value' text from apps like Torque/OBD Fusion/Car Scanner) into normalized samples, DTCs (with structural decode), an optional readiness snapshot, and warnings. Provide `content` (raw text) or an explicit `path` to read.",
+        "Parse a user-supplied scan log (CSV or 'key: value' text from apps like Torque/OBD Fusion/Car Scanner) into normalized samples, DTCs (with structural decode and a standardized definition for common generic codes; null for manufacturer-specific codes), an optional readiness snapshot, and warnings. Provide `content` (raw text) or an explicit `path` to read.",
       inputSchema: {
         content: z.string().optional(),
         path: z.string().optional(),
