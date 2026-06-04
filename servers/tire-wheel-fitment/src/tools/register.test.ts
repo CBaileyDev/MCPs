@@ -25,11 +25,13 @@ const EXPECTED_TOOLS = [
   "compare_tire_sizes",
   "speedometer_error",
   "decode_service_description",
-  "suggest_replacement_sizes"
+  "suggest_replacement_sizes",
+  "convert_wheel_offset",
+  "wheel_fitment_change"
 ];
 
 describe("registerTireWheelFitmentTools", () => {
-  it("registers exactly the six tire/wheel tools", () => {
+  it("registers exactly the eight tire/wheel tools", () => {
     const server = new FakeMcpServer();
     registerTireWheelFitmentTools(server as never);
     expect([...server.tools.keys()]).toEqual(EXPECTED_TOOLS);

@@ -18,7 +18,7 @@ Codex, and other MCP clients to useful tools and public data sources.
 | [Fuel Economy & Emissions](./servers/fuel-economy-emissions) | ✅ Working | MPG/MPGe, emissions, and trip/annual cost (FuelEconomy.gov, no key). |
 | [Local Auto Services](./servers/local-auto-services) | ✅ Working | Nearby repair/tire/parts/fuel/inspection/towing via OpenStreetMap Overpass (no key). |
 | [EV Charging & Range](./servers/ev-charging-range) | ✅ Working | EV charger lookup (NREL AFDC + Open Charge Map) + conservative range planning. AFDC works with `DEMO_KEY`. |
-| [Tire & Wheel Fitment](./servers/tire-wheel-fitment) | ✅ Working | Pure tire/wheel math: size parsing, dimensions, speedometer error, load/speed-index decode, safe replacement sizing (no keys). |
+| [Tire & Wheel Fitment](./servers/tire-wheel-fitment) | ✅ Working | Pure tire/wheel math: size parsing, dimensions, speedometer error, load/speed-index decode, safe replacement sizing, and wheel offset↔backspacing + poke/clearance fitment change (no keys). |
 | [Drivetrain Gearing](./servers/drivetrain-gearing) | ✅ Working | Pure gearing math: speed↔RPM from gear/final-drive/tire, gear-speed table, tire-size gearing effect, recommended final drive (no keys). |
 | [Automotive Unit Converter](./servers/automotive-unit-converter) | ✅ Working | Pure conversions for the units shop manuals use: fuel economy (incl. the L/100km reciprocal), power (hp/kW/PS), torque, pressure, volume (US vs Imperial), and mm↔fractional-inch socket sizing (no keys). |
 | [Automotive Electrical](./servers/automotive-electrical) | ✅ Working | Pure 12V/24V DC math: wire-gauge voltage drop + recommended gauge (AWG table), Ohm's law solver, fuse sizing, battery runtime, and series/parallel battery banks (no keys). |
