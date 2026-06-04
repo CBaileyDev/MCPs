@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import * as z from "zod/v4";
 import { ok } from "../result.js";
 import * as vpic from "../client.js";
+import { validateVin } from "../vin.js";
 
 export function registerVpicTools(server: McpServer): void {
   server.registerTool(
@@ -17,6 +18,20 @@ export function registerVpicTools(server: McpServer): void {
       annotations: { readOnlyHint: true, openWorldHint: true }
     },
     async ({ vin, modelYear }) => ok(await vpic.decodeVin(vin, modelYear))
+  );
+
+  server.registerTool(
+    "validate_vin",
+    {
+      title: "Validate VIN (offline)",
+      description:
+        "Offline pre-flight check for a VIN — no API call. Reports (1) universal FORMAT validity (17 chars, legal charset, no I/O/Q; a failure is a definite typo) and, SEPARATELY, (2) the North American CHECK DIGIT at position 9 (FMVSS/ISO 3779) — a mismatch means a typo OR a non-NA-market (e.g. EU/JP) VIN that does not use the scheme. Run before decode_vin to catch transcription errors offline.",
+      inputSchema: {
+        vin: z.string().min(1)
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    ({ vin }) => ok(validateVin(vin))
   );
 
   server.registerTool(

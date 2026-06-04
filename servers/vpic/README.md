@@ -8,6 +8,7 @@ VIN decoding and make/model/year validation, backed by the free
 | Tool | Purpose |
 | --- | --- |
 | `decode_vin` | Decode a full 17-char VIN (optionally with model year). |
+| `validate_vin` | **Offline** pre-flight (no API call): universal format check (17 chars, legal charset, no I/O/Q) + North American check digit, reported separately. |
 | `decode_vin_batch` | Decode up to 50 VINs in one request. |
 | `get_all_makes` | List all makes known to vPIC. |
 | `get_models_for_make_year` | List models for a make in a model year. |
@@ -15,7 +16,9 @@ VIN decoding and make/model/year validation, backed by the free
 | `decode_wmi` | Decode a 3-char World Manufacturer Identifier. |
 | `validate_make_model_year` | Validate a year/make/model and return canonical spelling. |
 
-Read-only; all data comes from NHTSA.
+Read-only. All data comes from NHTSA, except `validate_vin`, which is a fully
+offline/local computation (handy as a pre-flight before spending an API call on
+a mistyped VIN).
 
 ## Development
 
