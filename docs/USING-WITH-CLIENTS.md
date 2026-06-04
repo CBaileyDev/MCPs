@@ -75,7 +75,7 @@ work with **no API key**:
 | --- | --- | --- |
 | vpic, repair-info, fuel-economy-emissions, local-auto-services, tire-wheel-fitment | none | Free public data or pure math. |
 | garage-memory | none | Set `GARAGE_MEMORY_DIR` to change the local store path. |
-| part-interchange | none | Currently returns "not configured" for cross-reference lookups (no licensed data wired). |
+| part-interchange | none | Local personal interchange database — record your own OEM↔aftermarket cross-refs with `add_interchange`. Set `PART_INTERCHANGE_DIR` to change the store path. Licensed-provider lookup is a future adapter. |
 | vehicle-context-fitment, obd-diagnostics | none | Pure/local. OBD v1 parses scan logs; live hardware is a mock. |
 | ev-charging-range | `AFDC_API_KEY` (free; `DEMO_KEY` works for light use). Optional `OPEN_CHARGE_MAP_API_KEY` to add Open Charge Map. | |
 | marketplace-pricing | `EBAY_CLIENT_ID` + `EBAY_CLIENT_SECRET` (eBay Browse API) | Returns "not configured" until set. |

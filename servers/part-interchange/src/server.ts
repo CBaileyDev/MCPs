@@ -1,12 +1,19 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getProvider, type InterchangeProvider } from "./provider.js";
+import { InterchangeStore } from "./store.js";
 import { registerInterchangeTools } from "./tools/register.js";
 
 export const SERVER_INSTRUCTIONS =
-  "Part Interchange cross-references OEM and aftermarket part numbers. This server is scaffolded: until a licensed data provider is wired in, tools return a clear 'not configured' error. Do not fabricate interchange data.";
+  "Part Interchange is a personal OEM↔aftermarket interchange database. " +
+  "Use add_interchange to record known-equivalent part numbers, then cross_reference_part or " +
+  "find_aftermarket_equivalents to look them up. All data is stored locally in a JSON file. " +
+  "Licensed-provider cross-referencing (e.g. ACES/PIES feeds) is a future adapter — " +
+  "until one is wired in, the local database is the sole source of truth. " +
+  "Do not fabricate interchange data.";
 
 export function createInterchangeMcpServer(
-  provider: InterchangeProvider = getProvider()
+  provider: InterchangeProvider = getProvider(),
+  store: InterchangeStore = new InterchangeStore()
 ): McpServer {
   const server = new McpServer(
     {
@@ -18,6 +25,6 @@ export function createInterchangeMcpServer(
     }
   );
 
-  registerInterchangeTools(server, provider);
+  registerInterchangeTools(server, provider, store);
   return server;
 }
