@@ -44,4 +44,16 @@ describe("GarageStore", () => {
     expect(withNote?.notes).toHaveLength(1);
     expect((await store.listProjectBuilds())[0].name).toBe("E30 Restoration");
   });
+
+  it("does not leak data between separate store instances", async () => {
+    // Regression: a shared empty-DB constant would alias inner arrays, so a
+    // write to one store (whose file didn't exist yet) could leak into another.
+    const storeA = new GarageStore(join(tmpdir(), `garage-A-${randomUUID()}.json`));
+    const storeB = new GarageStore(join(tmpdir(), `garage-B-${randomUUID()}.json`));
+    await storeA.logSearch({ query: "A only" });
+    await storeA.saveVehicle({ nickname: "A's car" });
+    // storeB's file never existed; it must see nothing from storeA.
+    expect(await storeB.listRecentSearches()).toEqual([]);
+    expect(await storeB.listVehicles()).toEqual([]);
+  });
 });

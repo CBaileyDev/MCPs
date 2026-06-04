@@ -40,7 +40,14 @@ interface Db {
   projects: ProjectBuild[];
 }
 
-const EMPTY: Db = { vehicles: [], searches: [], preferredBrands: [], projects: [] };
+/**
+ * Fresh empty DB — a factory (not a shared module-level constant), so the inner
+ * arrays are never aliased across loads or store instances. A shared constant
+ * would let an empty-load's arrays be mutated in place and leak between stores.
+ */
+function emptyDb(): Db {
+  return { vehicles: [], searches: [], preferredBrands: [], projects: [] };
+}
 
 function defaultDbPath(): string {
   const dir =
@@ -58,9 +65,9 @@ export class GarageStore {
   private async load(): Promise<Db> {
     try {
       const raw = await readFile(this.path, "utf8");
-      return { ...EMPTY, ...(JSON.parse(raw) as Partial<Db>) };
+      return { ...emptyDb(), ...(JSON.parse(raw) as Partial<Db>) };
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") return { ...EMPTY };
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return emptyDb();
       throw err;
     }
   }
