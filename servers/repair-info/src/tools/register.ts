@@ -49,10 +49,26 @@ export function registerRepairInfoTools(server: McpServer): void {
     {
       title: "Get Maintenance Schedule",
       description:
-        "Return GENERIC, manufacturer-agnostic maintenance intervals. Pass currentMileage to flag items due soon. NOTE: rule-of-thumb guidance only, not the OEM schedule (which is proprietary). Full TSB text is also proprietary and not available here.",
-      inputSchema: { currentMileage: z.number().int().min(0).optional() },
+        "Return GENERIC, manufacturer-agnostic maintenance intervals. Pass currentMileage to flag items due soon. Set severe=true for severe/heavy-use driving (shorter intervals where applicable). NOTE: rule-of-thumb guidance only, not the OEM schedule (which is proprietary). Full TSB text is also proprietary and not available here.",
+      inputSchema: {
+        currentMileage: z.number().int().min(0).optional(),
+        severe: z.boolean().optional()
+      },
       annotations: { readOnlyHint: true, openWorldHint: false }
     },
-    async ({ currentMileage }) => ok(maintenanceSchedule(currentMileage))
+    async ({ currentMileage, severe }) =>
+      ok(maintenanceSchedule(currentMileage, severe != null ? { severe } : undefined))
+  );
+
+  server.registerTool(
+    "get_recalls_by_vin",
+    {
+      title: "Get Recalls by VIN",
+      description:
+        "Decode a VIN via the NHTSA vPIC API to identify the vehicle (make/model/year), then look up official NHTSA safety recalls for that vehicle. The VIN is decoded self-contained via a direct call to the NHTSA vPIC REST API.",
+      inputSchema: { vin: z.string().min(11) },
+      annotations: { readOnlyHint: true, openWorldHint: true }
+    },
+    async ({ vin }) => ok(await nhtsa.getRecallsByVin(vin))
   );
 }

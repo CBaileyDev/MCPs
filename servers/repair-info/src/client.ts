@@ -1,12 +1,37 @@
 import { fetchJson, seg } from "./http.js";
 
 const BASE = "https://api.nhtsa.gov";
+const VPIC_BASE = "https://vpic.nhtsa.dot.gov/api/vehicles";
 
 interface NhtsaResponse<T> {
   count?: number;
   results?: T[];
   Count?: number;
   Results?: T[];
+}
+
+interface VpicDecodeResponse {
+  Count: number;
+  Message: string;
+  Results: Array<Record<string, string>>;
+}
+
+export interface DecodedVehicle {
+  make: string;
+  model: string;
+  modelYear: number;
+}
+
+export interface RecallsByVinResult {
+  vin: string;
+  decoded: DecodedVehicle;
+  recalls: Array<Record<string, unknown>>;
+}
+
+export interface RecallsByVinIncomplete {
+  vin: string;
+  decoded: Partial<DecodedVehicle> & { raw: Record<string, string> };
+  message: string;
 }
 
 function rows<T>(data: NhtsaResponse<T>): T[] {
@@ -45,4 +70,52 @@ export async function getSafetyRatings(make: string, model: string, year: number
     })
   );
   return { variants, ratings };
+}
+
+/**
+ * Decode a VIN via the NHTSA vPIC DecodeVinValues endpoint.
+ * Returns the extracted make, model, and modelYear (coerced to number).
+ */
+export async function decodeVin(vin: string): Promise<DecodedVehicle | null> {
+  const url = `${VPIC_BASE}/DecodeVinValues/${seg(vin)}?format=json`;
+  const data = await fetchJson<VpicDecodeResponse>(url);
+  const raw = data.Results[0] ?? {};
+  const make = (raw["Make"] ?? "").trim();
+  const model = (raw["Model"] ?? "").trim();
+  const yearStr = (raw["ModelYear"] ?? "").trim();
+  const modelYear = yearStr ? Number(yearStr) : NaN;
+
+  if (!make || !model || !Number.isFinite(modelYear) || modelYear === 0) {
+    return null;
+  }
+  return { make, model, modelYear };
+}
+
+/**
+ * Decode a VIN and look up NHTSA recalls for the decoded vehicle.
+ * Returns vehicle identity + recalls, or a message if the VIN cannot be decoded.
+ */
+export async function getRecallsByVin(
+  vin: string
+): Promise<RecallsByVinResult | RecallsByVinIncomplete> {
+  const url = `${VPIC_BASE}/DecodeVinValues/${seg(vin)}?format=json`;
+  const data = await fetchJson<VpicDecodeResponse>(url);
+  const raw = data.Results[0] ?? {};
+
+  const make = (raw["Make"] ?? "").trim();
+  const model = (raw["Model"] ?? "").trim();
+  const yearStr = (raw["ModelYear"] ?? "").trim();
+  const modelYear = yearStr ? Number(yearStr) : NaN;
+
+  if (!make || !model || !Number.isFinite(modelYear) || modelYear === 0) {
+    return {
+      vin,
+      decoded: { raw, ...(make ? { make } : {}), ...(model ? { model } : {}), ...(Number.isFinite(modelYear) && modelYear !== 0 ? { modelYear } : {}) },
+      message:
+        "Could not fully decode the VIN: make, model, or model year is missing. Verify the VIN and try again."
+    };
+  }
+
+  const recalls = await getRecalls(make, model, modelYear);
+  return { vin, decoded: { make, model, modelYear }, recalls };
 }
