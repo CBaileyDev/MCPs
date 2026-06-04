@@ -1,0 +1,45 @@
+name: Smoke (live APIs)
+
+# Opt-in, NON-GATING drift detector. This workflow hits real public APIs
+# (NHTSA vPIC + recalls, FuelEconomy.gov, OpenStreetMap Overpass, NREL AFDC), so
+# it is deliberately kept OUT of the hermetic `ci.yml` matrix — ci.yml needs no
+# secrets and must stay green on every push. This one runs on a schedule and on
+# manual dispatch; a red run signals possible upstream drift (a moved endpoint or
+# a changed response shape), not a code defect in a PR.
+#
+# Each suite asserts only stable facts and SKIPS on transient upstream errors
+# (429/5xx/timeout), so routine outages (e.g. an overloaded Overpass) do not fail.
+
+on:
+  schedule:
+    - cron: "17 9 * * 1" # Mondays ~09:17 UTC
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: ${{ matrix.server }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        server:
+          - vpic
+          - repair-info
+          - fuel-economy-emissions
+          - local-auto-services
+          - ev-charging-range
+    defaults:
+      run:
+        working-directory: servers/${{ matrix.server }}
+    env:
+      # DEMO_KEY is fine for AFDC light use; the ev-charging suite skips on a 429.
+      AFDC_API_KEY: DEMO_KEY
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: servers/${{ matrix.server }}/package-lock.json
+      - run: npm ci
+      - run: npm run smoke

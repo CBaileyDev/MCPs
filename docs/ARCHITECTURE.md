@@ -64,8 +64,15 @@ the MCP client/agent layer. The intended data flow:
 ## CI
 
 `.github/workflows/ci.yml` fans out across every server in a matrix and runs
-`npm ci → typecheck → build → test`. Tests are hermetic (network mocked; live
-smoke tests are opt-in), so CI needs no secrets.
+`npm ci → typecheck → build → test`. Tests are hermetic (network mocked), so CI
+needs no secrets and stays deterministic.
+
+Live **smoke tests** for the networked servers are opt-in and run separately via
+[`.github/workflows/smoke.yml`](../.github/workflows/smoke.yml) (weekly + manual
+dispatch). They hit the real APIs to catch upstream drift (a moved endpoint, a
+changed response shape), assert only stable facts, skip on transient upstream
+errors, and are kept out of the gating matrix. See
+[SMOKE-TESTS.md](./SMOKE-TESTS.md).
 
 See [USING-WITH-CLIENTS.md](./USING-WITH-CLIENTS.md) to wire the servers into a
 client, and [`roadmaps/`](./roadmaps/) / [`superpowers/specs/`](./superpowers/specs/)

@@ -11,7 +11,7 @@ Codex, and other MCP clients to useful tools and public data sources.
 | [vPIC](./servers/vpic) | ✅ Working | VIN decoding and make/model/year validation (NHTSA vPIC, no key). |
 | [Garage Memory](./servers/garage-memory) | ✅ Working | Saved vehicles, past searches, preferred brands, project builds (local store). |
 | [Repair Info](./servers/repair-info) | ✅ Working | Recalls, complaints, safety ratings (NHTSA) + generic maintenance schedule. |
-| [Part Interchange](./servers/part-interchange) | 🔲 Scaffold | OEM ↔ aftermarket cross-reference. Needs a licensed data provider. |
+| [Part Interchange](./servers/part-interchange) | ✅ Working | OEM ↔ aftermarket cross-reference via a local personal interchange store (record/list/remove your own cross-refs). Licensed-provider lookup is a future adapter. |
 | [Marketplace Pricing](./servers/marketplace-pricing) | 🔲 Scaffold | Parts price comparison. Needs marketplace API credentials (e.g. eBay). |
 | [Vehicle Context & Fitment](./servers/vehicle-context-fitment) | ✅ Working | Canonical vehicle profile with per-attribute confidence and missing/conflicting fitment attributes (local). |
 | [OBD Diagnostics](./servers/obd-diagnostics) | ✅ Working | Scan-log parsing + mocked OBD-II adapter: DTCs, readiness, freeze frames, PIDs (read-only, no native deps). |
@@ -22,9 +22,9 @@ Codex, and other MCP clients to useful tools and public data sources.
 | [Drivetrain Gearing](./servers/drivetrain-gearing) | ✅ Working | Pure gearing math: speed↔RPM from gear/final-drive/tire, gear-speed table, tire-size gearing effect, recommended final drive (no keys). |
 | [Automotive Unit Converter](./servers/automotive-unit-converter) | ✅ Working | Pure conversions for the units shop manuals use: fuel economy (incl. the L/100km reciprocal), power (hp/kW/PS), torque, pressure, volume (US vs Imperial), and mm↔fractional-inch socket sizing (no keys). |
 
-The two scaffolds expose their full tool surface but return a clear
-"provider not configured" error until a data source is wired in. No
-ToS-violating scraping is included.
+`marketplace-pricing` is a scaffold: it exposes its full tool surface but
+returns a clear "provider not configured" error until marketplace API
+credentials (e.g. eBay) are set. No ToS-violating scraping is included.
 
 ## Repository Layout
 
@@ -60,4 +60,5 @@ workspace root.
 
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — conventions, design principles, and how the servers relate.
 - [docs/USING-WITH-CLIENTS.md](./docs/USING-WITH-CLIENTS.md) — build the servers and wire them into an MCP client (combined config).
-- CI: every server is built and tested on each push via [`.github/workflows/ci.yml`](./.github/workflows/ci.yml).
+- [docs/SMOKE-TESTS.md](./docs/SMOKE-TESTS.md) — opt-in live smoke tests that hit the real APIs to catch upstream drift.
+- CI: every server is built and tested on each push via [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) (hermetic, no secrets). A separate, non-gating [`smoke.yml`](./.github/workflows/smoke.yml) runs the live smoke tests weekly and on demand.
