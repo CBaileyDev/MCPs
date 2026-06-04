@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Each server is self-contained (its own package.json, lockfile, and tsconfig),
+# so we fan out across them with a matrix. Tests are hermetic (network calls are
+# mocked; any live-API smoke tests are skipped unless their env var is set), so
+# CI needs no secrets.
+jobs:
+  build-test:
+    name: ${{ matrix.server }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        server:
+          - rockauto-catalog-search
+          - vpic
+          - garage-memory
+          - repair-info
+          - part-interchange
+          - marketplace-pricing
+          - vehicle-context-fitment
+          - obd-diagnostics
+          - fuel-economy-emissions
+          - local-auto-services
+          - ev-charging-range
+          - tire-wheel-fitment
+    defaults:
+      run:
+        working-directory: servers/${{ matrix.server }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: servers/${{ matrix.server }}/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test

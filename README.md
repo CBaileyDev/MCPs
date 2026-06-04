@@ -49,3 +49,9 @@ Each MCP server lives in its own folder under `servers/` with its own
 README, package metadata, tests, and client configuration examples. Servers are
 self-contained (own `package.json`, lockfile, and `tsconfig.json`); there is no
 workspace root.
+
+## Documentation
+
+- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — conventions, design principles, and how the servers relate.
+- [docs/USING-WITH-CLIENTS.md](./docs/USING-WITH-CLIENTS.md) — build the servers and wire them into an MCP client (combined config).
+- CI: every server is built and tested on each push via [`.github/workflows/ci.yml`](./.github/workflows/ci.yml).
