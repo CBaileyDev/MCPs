@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lookupPid, lookupPidByLabel, normalizePidCode, normalizeUnit, resolveLabel } from "./pids.js";
+import { lookupPid, lookupPidByLabel, normalizePidCode, normalizeUnit, resolveLabel, resolvePidCode } from "./pids.js";
 
 describe("normalizePidCode", () => {
   it("normalizes hex forms to 2-char uppercase", () => {
@@ -51,5 +51,27 @@ describe("normalizeUnit", () => {
   it("falls back to the known canonical unit when none provided", () => {
     expect(normalizeUnit("05", undefined, undefined)).toBe("C");
     expect(lookupPid("05")?.unit).toBe("C");
+  });
+});
+
+describe("resolvePidCode", () => {
+  it("returns the normalized hex pid when given a valid pid string", () => {
+    expect(resolvePidCode("0C", undefined)).toBe("0C");
+    expect(resolvePidCode("c", undefined)).toBe("0C");
+  });
+
+  it("resolves a canonical label to its pid hex", () => {
+    expect(resolvePidCode(undefined, "Engine RPM")).toBe("0C");
+    expect(resolvePidCode(undefined, "Engine Coolant Temperature")).toBe("05");
+  });
+
+  it("resolves a common alias to the pid hex", () => {
+    expect(resolvePidCode(undefined, "coolant")).toBe("05");
+    expect(resolvePidCode(undefined, "RPM")).toBe("0C");
+  });
+
+  it("returns undefined for genuinely unknown labels", () => {
+    expect(resolvePidCode(undefined, "Flux Capacitor")).toBeUndefined();
+    expect(resolvePidCode(undefined, undefined)).toBeUndefined();
   });
 });

@@ -72,9 +72,11 @@ const PID_LABEL_ALIASES: Record<string, string> = {
   ect: "05",
   speed: "0D",
   "vehicle speed (obd)": "0D",
+  "speed (obd)": "0D",
   vss: "0D",
   maf: "10",
   "mass airflow": "10",
+  "mass air flow rate": "10",
   iat: "0F",
   "intake air temp": "0F",
   throttle: "11",
@@ -128,6 +130,21 @@ export function resolveLabel(pid: string | undefined, label: string | undefined)
   const known = lookupPid(pid) ?? lookupPidByLabel(label);
   if (known) return known.label;
   return (label ?? "").trim() || "Unknown";
+}
+
+/**
+ * Resolve the canonical PID hex code for a sample that may arrive with only a
+ * label or alias (no explicit pid column). Returns the 2-char uppercase hex
+ * when a known PID or alias matches, otherwise undefined. Never throws.
+ */
+export function resolvePidCode(
+  pid: string | undefined,
+  label: string | undefined
+): string | undefined {
+  const fromPid = normalizePidCode(pid);
+  if (fromPid && KNOWN_PIDS[fromPid]) return fromPid;
+  const known = lookupPidByLabel(label);
+  return known?.pid;
 }
 
 /**

@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { parseScanLog } from "./logs.js";
 
+// ---------------------------------------------------------------------------
+// Wide-format Torque CSV fixture (exact real-world export format)
+// ---------------------------------------------------------------------------
+const TORQUE_WIDE_FIXTURE = `GPS Time,Device Time,Longitude,Latitude,GPS Speed (Meters/second),Altitude (m),Bearing,Engine RPM(rpm),Speed (OBD)(km/h),Engine Coolant Temperature(°C),Intake Air Temperature(°C),Mass Air Flow Rate(g/s),Throttle Position(Manifold)(%)
+2024-01-01 12:00:00.000,2024-01-01 12:00:00.000,-74.0,40.7,0.0,10.0,90.0,850,0,89,21,3.45,14.2
+`;
+
 // A realistic multi-row CSV with a clean header and a mix of recognized/unknown columns.
 const CSV_FIXTURE = `Timestamp,PID,Label,Value,Unit
 2024-01-15T10:00:00Z,0C,Engine RPM,820,rpm
@@ -105,5 +112,87 @@ describe("parseScanLog — key:value mode", () => {
     const result = parseScanLog(KV_FIXTURE, { format: "keyvalue", source: "test-source" });
     expect(result.dtcs.every(d => d.source === "test-source")).toBe(true);
     expect(result.samples.every(s => s.source === "test-source")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Wide-format CSV (Torque / OBD Fusion / Car Scanner)
+// ---------------------------------------------------------------------------
+describe("parseScanLog — wide-format CSV (Torque export)", () => {
+  it("auto-detects the wide format and emits OBD samples", () => {
+    const result = parseScanLog(TORQUE_WIDE_FIXTURE);
+    // Should have RPM, Speed, Coolant, IAT, MAF, Throttle — 6 OBD columns
+    expect(result.samples.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it("extracts Engine RPM with correct label, unit, and numeric value", () => {
+    const result = parseScanLog(TORQUE_WIDE_FIXTURE);
+    const rpm = result.samples.find(s => s.label === "Engine RPM");
+    expect(rpm).toBeDefined();
+    expect(rpm?.value).toBe(850);
+    expect(rpm?.unit).toBe("rpm");
+  });
+
+  it("extracts Engine Coolant Temperature with the embedded unit from the header", () => {
+    const result = parseScanLog(TORQUE_WIDE_FIXTURE);
+    const coolant = result.samples.find(s => s.label === "Engine Coolant Temperature");
+    expect(coolant).toBeDefined();
+    expect(coolant?.value).toBe(89);
+    expect(coolant?.unit).toBe("°C");
+  });
+
+  it("handles nested-paren header: Throttle Position(Manifold)(%) → exact label and unit", () => {
+    const result = parseScanLog(TORQUE_WIDE_FIXTURE);
+    // The label retains the inner paren group; the unit is stripped from the last paren group.
+    const throttle = result.samples.find(s => s.label === "Throttle Position(Manifold)");
+    expect(throttle).toBeDefined();
+    expect(throttle?.unit).toBe("%");
+  });
+
+  it("skips GPS Time, Device Time, Longitude, Latitude, GPS Speed, Altitude, Bearing columns — no samples", () => {
+    const result = parseScanLog(TORQUE_WIDE_FIXTURE);
+    const labels = result.samples.map(s => s.label.toLowerCase());
+    expect(labels.some(l => l.includes("gps time"))).toBe(false);
+    expect(labels.some(l => l.includes("device time"))).toBe(false);
+    expect(labels.some(l => l.includes("longitude"))).toBe(false);
+    expect(labels.some(l => l.includes("latitude"))).toBe(false);
+    expect(labels.some(l => l.includes("altitude"))).toBe(false);
+    expect(labels.some(l => l.includes("bearing"))).toBe(false);
+  });
+
+  it("does NOT warn about the skipped GPS/metadata columns", () => {
+    const result = parseScanLog(TORQUE_WIDE_FIXTURE);
+    expect(result.warnings).toHaveLength(0);
+  });
+
+  it("back-fills the hex pid for Engine RPM (resolves to 0C)", () => {
+    const result = parseScanLog(TORQUE_WIDE_FIXTURE);
+    const rpm = result.samples.find(s => s.label === "Engine RPM");
+    expect(rpm?.pid).toBe("0C");
+  });
+
+  it("carries the timestamp from the first time column to each sample", () => {
+    const result = parseScanLog(TORQUE_WIDE_FIXTURE);
+    expect(result.samples.every(s => s.timestamp === "2024-01-01 12:00:00.000")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Back-fill: long-format label-only row resolves to hex PID
+// ---------------------------------------------------------------------------
+describe("parseScanLog — PID back-fill on long CSV", () => {
+  it("back-fills pid '05' for a label-only coolant row in long-format CSV", () => {
+    const csv = `Timestamp,Label,Value,Unit\n2024-01-15T10:00:00Z,Coolant,92,C\n`;
+    const result = parseScanLog(csv, { format: "csv" });
+    expect(result.samples.length).toBe(1);
+    expect(result.samples[0].pid).toBe("05");
+  });
+
+  it("back-fills pid for Engine RPM alias in key:value format", () => {
+    const kv = `Engine RPM: 820 rpm\n`;
+    const result = parseScanLog(kv, { format: "keyvalue" });
+    const rpm = result.samples.find(s => s.label === "Engine RPM");
+    expect(rpm).toBeDefined();
+    expect(rpm?.pid).toBe("0C");
   });
 });

@@ -67,4 +67,40 @@ describe("decodeDtcStructure", () => {
     expect(() => decodeDtcStructure("")).toThrow();
     expect(() => decodeDtcStructure("12345")).toThrow();
   });
+
+  it("includes subsystemArea on every structural decode", () => {
+    const result = decodeDtcStructure("P0301");
+    expect(result).toHaveProperty("subsystemArea");
+    expect(typeof result.subsystemArea).toBe("string");
+    expect(result.subsystemArea.length).toBeGreaterThan(0);
+  });
+
+  it("P0300 → subsystemArea mentions ignition or misfire (third digit '3')", () => {
+    const result = decodeDtcStructure("P0300");
+    // Third char is '3' → ignition system or misfire area
+    expect(result.subsystem).toBe("3");
+    expect(result.subsystemArea.toLowerCase()).toMatch(/ignition|misfire/);
+  });
+
+  it("P0171 → subsystemArea mentions fuel/air metering (third digit '1')", () => {
+    const result = decodeDtcStructure("P0171");
+    // Third char is '1' → fuel and air metering area
+    expect(result.subsystem).toBe("1");
+    expect(result.subsystemArea.toLowerCase()).toMatch(/fuel|air|mete/);
+  });
+
+  it("B/C/U codes include a generic subsystemArea reflecting their system letter", () => {
+    expect(decodeDtcStructure("B1234").subsystemArea).toMatch(/body/i);
+    expect(decodeDtcStructure("C0035").subsystemArea).toMatch(/chassis/i);
+    expect(decodeDtcStructure("U0100").subsystemArea).toMatch(/network|communication/i);
+  });
+
+  it("existing structural fields (system, codeType, subsystem) are still present", () => {
+    const result = decodeDtcStructure("P0301");
+    expect(result.system).toBe("powertrain");
+    expect(result.codeType).toBe("generic");
+    expect(result.subsystem).toBe("3");
+    // Ensure subsystemArea is additive, not replacing subsystem
+    expect(result.subsystem).not.toEqual(result.subsystemArea);
+  });
 });

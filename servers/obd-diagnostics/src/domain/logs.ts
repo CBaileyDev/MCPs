@@ -18,7 +18,7 @@ import {
   type ReadinessMonitor,
   type ReadinessSnapshot
 } from "./readiness.js";
-import { normalizePidCode, normalizeUnit, resolveLabel, type PidSample } from "./pids.js";
+import { normalizePidCode, normalizeUnit, resolveLabel, resolvePidCode, type PidSample } from "./pids.js";
 
 /** Result of parsing a scan log. */
 export type ParsedScanLog = {
@@ -169,20 +169,168 @@ function parseCsv(lines: string[], source: string): ParsedScanLog {
       warnings.push(`Row ${i + 1}: unrecognized PID "${rawPid}"; kept value but dropped PID.`);
     }
 
-    const unit = normalizeUnit(pid, rawLabel, rawUnit);
+    // Back-fill the hex PID from label/alias when no explicit PID column is present.
+    // Explicit pid column wins when it matches a known PID; fall back to label resolution.
+    const resolvedPid = pid ?? resolvePidCode(undefined, rawLabel);
+
+    const unit = normalizeUnit(resolvedPid, rawLabel, rawUnit);
     if (rawUnit && rawUnit.trim() !== "" && !isKnownUnit(rawUnit)) {
       warnings.push(`Row ${i + 1}: unrecognized unit "${rawUnit.trim()}"; passed through unchanged.`);
     }
 
     const sample: PidSample = {
-      label: resolveLabel(pid, rawLabel),
+      label: resolveLabel(resolvedPid, rawLabel),
       value: coerceValue(rawValue),
       source
     };
-    if (pid) sample.pid = pid;
+    if (resolvedPid) sample.pid = resolvedPid;
     if (unit) sample.unit = unit;
     if (rawTimestamp && rawTimestamp.trim() !== "") sample.timestamp = rawTimestamp.trim();
     samples.push(sample);
+  }
+
+  return { samples, dtcs, warnings };
+}
+
+// ---------------------------------------------------------------------------
+// Wide-format CSV support (Torque / OBD Fusion / Car Scanner export style)
+// ---------------------------------------------------------------------------
+
+/**
+ * Header substrings that identify non-OBD metadata columns in wide exports.
+ * These are skipped silently — no samples emitted, no warnings generated.
+ * Keep specific enough that "speed" is NOT in this list (it would kill Vehicle Speed).
+ */
+const WIDE_SKIP_SUBSTRINGS = [
+  "gps time",
+  "device time",
+  "gps speed",
+  "longitude",
+  "latitude",
+  "altitude",
+  "bearing",
+  "gravity x",
+  "gravity y",
+  "gravity z",
+  "horizontal dilution",
+  "gps accuracy",
+  "gps altitude"
+] as const;
+
+/** Does this header string identify a non-OBD metadata column to skip? */
+function isWideSkipColumn(headerLower: string): boolean {
+  return WIDE_SKIP_SUBSTRINGS.some(sub => headerLower.includes(sub));
+}
+
+/**
+ * Detect the "wide" export format: commas present, first column is time-ish,
+ * and a significant portion of the remaining columns look like `Label(unit)`.
+ * The long-format fixtures score 0 paren-headers so they stay on the long path.
+ */
+function looksLikeWide(lines: string[]): boolean {
+  const firstNonEmpty = lines.find(l => l.trim().length > 0);
+  if (!firstNonEmpty || !firstNonEmpty.includes(",")) return false;
+
+  const cols = splitCsvLine(firstNonEmpty);
+  if (cols.length < 2) return false;
+
+  // First column must be time-ish.
+  const firstColKey = normalizeKey(cols[0]);
+  const timeishFirst =
+    firstColKey === "gps time" ||
+    firstColKey === "device time" ||
+    firstColKey === "time" ||
+    firstColKey === "timestamp";
+  if (!timeishFirst) return false;
+
+  // Count remaining columns that end with a parenthetical `(unit)`.
+  const parenRe = /\([^()]+\)\s*$/;
+  const remaining = cols.slice(1);
+  const parenCount = remaining.filter(c => parenRe.test(c.trim())).length;
+
+  // Require at least 3 paren-headers (enough signal that this is wide format).
+  return parenCount >= 3;
+}
+
+/**
+ * Extract label and unit from a wide-format header like
+ *   "Engine RPM(rpm)"                    → { label: "Engine RPM", unit: "rpm" }
+ *   "Engine Coolant Temperature(°C)"     → { label: "Engine Coolant Temperature", unit: "°C" }
+ *   "Throttle Position(Manifold)(%)"     → { label: "Throttle Position(Manifold)", unit: "%" }
+ *
+ * Rule: unit = the LAST parenthetical group; label = everything before it.
+ */
+function splitWideHeader(header: string): { label: string; unit: string | undefined } {
+  // Match the very last `(...)` group, allowing nested parens in the label.
+  const m = /^(.*)\(([^()]+)\)\s*$/.exec(header.trim());
+  if (m) {
+    return { label: m[1].trim(), unit: m[2].trim() };
+  }
+  return { label: header.trim(), unit: undefined };
+}
+
+/** Parse a wide-format CSV (one row per time tick, many PID columns). */
+function parseWideCsv(lines: string[], source: string): ParsedScanLog {
+  const warnings: string[] = [];
+  const samples: PidSample[] = [];
+  const dtcs: DtcRecord[] = [];
+
+  const headerIndex = lines.findIndex(l => l.trim().length > 0);
+  const rawHeaders = splitCsvLine(lines[headerIndex]);
+
+  // Pre-process headers: classify each column.
+  type WideColMeta =
+    | { kind: "timestamp" }
+    | { kind: "skip" }
+    | { kind: "obd"; label: string; unit: string | undefined };
+
+  const colMeta: WideColMeta[] = rawHeaders.map(h => {
+    const hLower = normalizeKey(h);
+    if (
+      hLower === "gps time" ||
+      hLower === "device time" ||
+      hLower === "time" ||
+      hLower === "timestamp"
+    ) {
+      return { kind: "timestamp" };
+    }
+    if (isWideSkipColumn(hLower)) return { kind: "skip" };
+    const { label, unit } = splitWideHeader(h);
+    return { kind: "obd", label, unit };
+  });
+
+  // Index of the first timestamp column (used to stamp every sample in the row).
+  const tsIndex = colMeta.findIndex(m => m.kind === "timestamp");
+
+  for (let i = headerIndex + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trim().length === 0) continue;
+
+    const cells = splitCsvLine(line);
+    const timestamp = tsIndex >= 0 ? cells[tsIndex]?.trim() : undefined;
+
+    for (let c = 0; c < colMeta.length; c++) {
+      const meta = colMeta[c];
+      if (meta.kind !== "obd") continue;
+
+      const rawValue = cells[c] ?? "";
+      if (rawValue.trim() === "") continue; // blank cell — skip silently
+
+      const coerced = coerceValue(rawValue);
+      // Back-fill hex PID from label or alias.
+      const resolvedPid = resolvePidCode(undefined, meta.label);
+      const canonicalLabel = resolveLabel(resolvedPid, meta.label);
+
+      const sample: PidSample = {
+        label: canonicalLabel,
+        value: coerced,
+        source
+      };
+      if (resolvedPid) sample.pid = resolvedPid;
+      if (meta.unit) sample.unit = meta.unit;
+      if (timestamp && timestamp !== "") sample.timestamp = timestamp;
+      samples.push(sample);
+    }
   }
 
   return { samples, dtcs, warnings };
@@ -304,12 +452,15 @@ function parseKeyValue(lines: string[], source: string): ParsedScanLog {
     if (unit && !isKnownUnit(unit)) {
       warnings.push(`Line ${i + 1}: unrecognized unit "${unit}" for "${key}"; passed through.`);
     }
+    // Back-fill hex PID from label/alias.
+    const kvPid = resolvePidCode(undefined, key);
     const sample: PidSample = {
-      label: resolveLabel(undefined, key),
+      label: resolveLabel(kvPid, key),
       value: coerceValue(value),
       source
     };
-    const resolvedUnit = normalizeUnit(undefined, key, unit);
+    if (kvPid) sample.pid = kvPid;
+    const resolvedUnit = normalizeUnit(kvPid, key, unit);
     if (resolvedUnit) sample.unit = resolvedUnit;
     samples.push(sample);
   }
@@ -349,8 +500,17 @@ export function parseScanLog(content: string, opts: ParseScanLogOptions = {}): P
   const lines = content.split(/\r\n|\r|\n/);
   const format = opts.format ?? "auto";
 
-  if (format === "csv" || (format === "auto" && looksLikeCsv(lines))) {
-    return parseCsv(lines, source);
+  if (format === "keyvalue") {
+    return parseKeyValue(lines, source);
   }
+
+  if (format === "csv") {
+    // Even when format is forced to csv, prefer the wide path if the header looks wide.
+    return looksLikeWide(lines) ? parseWideCsv(lines, source) : parseCsv(lines, source);
+  }
+
+  // auto: try wide first (more specific), then long CSV, then key:value.
+  if (looksLikeWide(lines)) return parseWideCsv(lines, source);
+  if (looksLikeCsv(lines)) return parseCsv(lines, source);
   return parseKeyValue(lines, source);
 }

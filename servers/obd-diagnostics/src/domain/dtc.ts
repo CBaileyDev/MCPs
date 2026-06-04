@@ -28,6 +28,12 @@ export type DtcStructure = {
   codeType: "generic" | "manufacturer";
   /** The third character of the code, as a string (the subsystem group). */
   subsystem: string;
+  /**
+   * For P-codes: the broad functional area implied by the third character,
+   * using original short phrasing (not SAE prose). For B/C/U codes this
+   * reflects the general system area from the letter alone. Always set.
+   */
+  subsystemArea: string;
 };
 
 /** Standard OBD-II DTC format: letter + 4 hex-ish chars (case-insensitive). */
@@ -38,6 +44,37 @@ const SYSTEM_BY_LETTER: Record<string, DtcStructure["system"]> = {
   B: "body",
   C: "chassis",
   U: "network"
+};
+
+/**
+ * For P-codes, the third character implies a broad functional area.
+ * Phrasing is original (not SAE J2012 prose). Characters C–F are not
+ * in common use but are handled defensively.
+ */
+const P_CODE_SUBSYSTEM_AREA: Record<string, string> = {
+  "0": "hybrid/EV or other powertrain",
+  "1": "fuel and air metering",
+  "2": "fuel and air metering (injector circuit)",
+  "3": "ignition system or misfire",
+  "4": "auxiliary emission controls",
+  "5": "vehicle speed control and idle control",
+  "6": "computer and output circuits",
+  "7": "transmission and gearbox",
+  "8": "transmission and gearbox",
+  "9": "transmission and gearbox",
+  A: "hybrid/EV drivetrain",
+  B: "hybrid/EV drivetrain",
+  C: "powertrain (unassigned range)",
+  D: "powertrain (unassigned range)",
+  E: "powertrain (unassigned range)",
+  F: "powertrain (unassigned range)"
+};
+
+/** Generic area labels for non-powertrain codes (by system letter). */
+const NON_P_SUBSYSTEM_AREA: Record<string, string> = {
+  B: "body system",
+  C: "chassis system",
+  U: "network/communication system"
 };
 
 /**
@@ -74,5 +111,10 @@ export function decodeDtcStructure(code: string): DtcStructure {
   const codeType: DtcStructure["codeType"] = normalized[1] === "0" ? "generic" : "manufacturer";
   const subsystem = normalized[2];
 
-  return { system, codeType, subsystem };
+  const subsystemArea =
+    normalized[0] === "P"
+      ? P_CODE_SUBSYSTEM_AREA[subsystem] ?? "powertrain (unassigned range)"
+      : NON_P_SUBSYSTEM_AREA[normalized[0]] ?? "unclassified system";
+
+  return { system, codeType, subsystem, subsystemArea };
 }
