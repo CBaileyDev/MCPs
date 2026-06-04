@@ -17,6 +17,7 @@ servers, then optionally remember it (`garage-memory`).
 > "Here's the VIN of a car I'm considering — anything I should know?"
 
 ```
+vpic.validate_vin (vin)                      → offline pre-flight: catch a mistyped VIN before any API call
 vpic.decode_vin (vin)
   → make / model / year / engine / plant
 repair-info.get_recalls_by_vin (vin)         → open safety recalls
@@ -36,6 +37,8 @@ tire-wheel-fitment.parse_tire_size (current + proposed)
 tire-wheel-fitment.calculate_tire_dimensions → overall diameter, sidewall, circumference
 tire-wheel-fitment.suggest_replacement_sizes → diameter-matched alternatives
 tire-wheel-fitment.speedometer_error         → % speedo error from the size change
+tire-wheel-fitment.convert_wheel_offset      → offset(mm) ↔ backspacing(in) for the new wheels
+tire-wheel-fitment.wheel_fitment_change      → how much more they poke / inner clearance vs. stock
 drivetrain-gearing.tire_gearing_effect       → effective final-drive change, restoring ratio
 local-auto-services.find_tire_shops (lat/lon) → where to buy / mount
 garage-memory.create_project_build           → record the wheel/tire plan
@@ -92,9 +95,24 @@ engine-build-math.displacement (bore/stroke/cylinders) → ci / cc / liters
 engine-build-math.compression_ratio (+ chamber/gasket/deck/piston cc) → static CR
 engine-build-math.mean_piston_speed (stroke, rpm)      → RPM stress check
 engine-build-math.engine_airflow_cfm (cid, rpm, VE)    → carb/intake CFM target
+engine-build-math.injector_size_required (hp, cyl)     → fuel-injector size (lb/hr + cc/min)
 automotive-unit-converter.convert_power                → quoted PS ↔ SAE hp ↔ kW
 garage-memory.create_project_build + add_project_note  → record the combo
 ```
+
+## 7. Check a tow setup is within limits
+
+> "Can my truck safely pull this 7,000 lb trailer with the family aboard?"
+
+```
+towing-payload-math.tongue_weight (trailer wt, %)      → tongue weight + 10–15% sway check
+towing-payload-math.payload_check                      → do tongue + passengers + cargo fit payload?
+towing-payload-math.towing_headroom (GCWR, truck, trailer) → room left under GCWR
+towing-payload-math.tow_setup_check                    → all three at once, and the binding limit
+```
+
+All ratings (GVWR, GCWR, payload) come from the door-jamb label and the
+manufacturer's towing guide — the server does the math on weights you supply.
 
 ---
 
