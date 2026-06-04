@@ -20,6 +20,7 @@ Codex, and other MCP clients to useful tools and public data sources.
 | [EV Charging & Range](./servers/ev-charging-range) | ✅ Working | EV charger lookup (NREL AFDC + Open Charge Map) + conservative range planning. AFDC works with `DEMO_KEY`. |
 | [Tire & Wheel Fitment](./servers/tire-wheel-fitment) | ✅ Working | Pure tire/wheel math: size parsing, dimensions, speedometer error, load/speed-index decode, safe replacement sizing (no keys). |
 | [Drivetrain Gearing](./servers/drivetrain-gearing) | ✅ Working | Pure gearing math: speed↔RPM from gear/final-drive/tire, gear-speed table, tire-size gearing effect, recommended final drive (no keys). |
+| [Automotive Unit Converter](./servers/automotive-unit-converter) | ✅ Working | Pure conversions for the units shop manuals use: fuel economy (incl. the L/100km reciprocal), power (hp/kW/PS), torque, pressure, volume (US vs Imperial), and mm↔fractional-inch socket sizing (no keys). |
 
 The two scaffolds expose their full tool surface but return a clear
 "provider not configured" error until a data source is wired in. No
@@ -40,6 +41,9 @@ servers/
   fuel-economy-emissions/
   local-auto-services/
   ev-charging-range/
+  tire-wheel-fitment/
+  drivetrain-gearing/
+  automotive-unit-converter/
 docs/
   roadmaps/
   superpowers/

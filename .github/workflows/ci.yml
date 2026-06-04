@@ -30,6 +30,7 @@ jobs:
           - ev-charging-range
           - tire-wheel-fitment
           - drivetrain-gearing
+          - automotive-unit-converter
     defaults:
       run:
         working-directory: servers/${{ matrix.server }}
