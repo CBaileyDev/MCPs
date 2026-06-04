@@ -29,6 +29,7 @@ jobs:
           - local-auto-services
           - ev-charging-range
           - tire-wheel-fitment
+          - drivetrain-gearing
     defaults:
       run:
         working-directory: servers/${{ matrix.server }}

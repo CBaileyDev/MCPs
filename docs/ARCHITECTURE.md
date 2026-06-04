@@ -52,8 +52,8 @@ the MCP client/agent layer. The intended data flow:
    (one canonical profile with per-attribute confidence + what's missing).
 2. **Domain servers** consume that identity: `repair-info` (recalls/complaints/
    ratings + maintenance), `fuel-economy-emissions`, `tire-wheel-fitment`,
-   `obd-diagnostics` (scan-log evidence), `local-auto-services`,
-   `ev-charging-range`.
+   `drivetrain-gearing`, `obd-diagnostics` (scan-log evidence),
+   `local-auto-services`, `ev-charging-range`.
 3. **Persistence** — `garage-memory` stores vehicles, searches, preferred
    brands, and project builds locally so results feel personalized.
 4. **Parts** — `rockauto-catalog-search`, `part-interchange`,
