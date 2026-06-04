@@ -61,8 +61,9 @@ marketplace-pricing.compare_prices            → price the part (needs marketpl
 > "Can my EV make this 180-mile leg, and where would I charge?"
 
 ```
-vehicle-context-fitment.resolve_vehicle_context → battery kWh / EPA range / efficiency
+vehicle-context-fitment.resolve_vehicle_context → best-known vehicle profile
 ev-charging-range.estimate_range_margin       → conservative margin vs. reserve
+  (batteryKwh / epaRangeMiles / efficiency come from the profile or the user)
 ev-charging-range.plan_ev_route               → per-leg feasibility (NOT navigation)
 ev-charging-range.find_chargers (lat/lon)     → stations near the tight legs
 ev-charging-range.explain_charging_plan       → plain-language summary + caveats
