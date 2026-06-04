@@ -40,16 +40,19 @@ function callTool(
 // ─── registration count ───────────────────────────────────────────────────────
 
 describe("registerEngineBuildMathTools", () => {
-  it("registers exactly 5 tools", () => {
+  it("registers exactly 8 tools", () => {
     const { server, registrations } = makeStubServer();
     registerEngineBuildMathTools(server);
-    expect(registrations).toHaveLength(5);
+    expect(registrations).toHaveLength(8);
     const names = registrations.map(r => r.name);
     expect(names).toContain("displacement");
     expect(names).toContain("compression_ratio");
     expect(names).toContain("bore_stroke_ratio");
     expect(names).toContain("mean_piston_speed");
     expect(names).toContain("engine_airflow_cfm");
+    expect(names).toContain("injector_flow_convert");
+    expect(names).toContain("injector_size_required");
+    expect(names).toContain("injector_max_hp");
   });
 });
 
@@ -255,5 +258,182 @@ describe("engine_airflow_cfm tool — note present", () => {
     });
     expect(typeof r.note).toBe("string");
     expect((r.note as string).includes("3456")).toBe(true);
+  });
+});
+
+// ─── injector_flow_convert tool ───────────────────────────────────────────────
+// Pinned: 550 cc/min → lbPerHr ≈ 52.38 (full precision 52.38187…, rounds to 52.38 at 2dp)
+
+describe("injector_flow_convert tool — pinned values cc_min input", () => {
+  it("550 cc/min → ccPerMin = 550, lbPerHr ≈ 52.38", () => {
+    const { server, registrations } = makeStubServer();
+    registerEngineBuildMathTools(server);
+    const r = callTool(registrations, "injector_flow_convert", {
+      value: 550,
+      from: "cc_min",
+      fuelDensityGPerCc: 0.72
+    });
+    expect(r.ccPerMin).toBe(550);
+    // Full precision 52.38187622…, rounds to 52.38 at 2dp
+    expect(r.lbPerHr).toBe(52.38);
+  });
+});
+
+describe("injector_flow_convert tool — pinned values lb_hr input", () => {
+  it("52.38 lb/hr → lbPerHr = 52.38, ccPerMin ≈ 549.98", () => {
+    const { server, registrations } = makeStubServer();
+    registerEngineBuildMathTools(server);
+    const r = callTool(registrations, "injector_flow_convert", {
+      value: 52.38,
+      from: "lb_hr",
+      fuelDensityGPerCc: 0.72
+    });
+    expect(r.lbPerHr).toBe(52.38);
+    // 52.38 lb/hr is a rounded value; back-conversion gives ≈ 549.98
+    expect(r.ccPerMin as number).toBeCloseTo(549.98, 1);
+  });
+});
+
+describe("injector_flow_convert tool — round-trip via full-precision domain values", () => {
+  it("550 cc/min → lb/hr → cc/min recovers 550 within tool rounding tolerance", () => {
+    const { server, registrations } = makeStubServer();
+    registerEngineBuildMathTools(server);
+    const step1 = callTool(registrations, "injector_flow_convert", {
+      value: 550,
+      from: "cc_min",
+      fuelDensityGPerCc: 0.72
+    });
+    // step1.lbPerHr = 52.38 (rounded to 2dp at tool layer)
+    const step2 = callTool(registrations, "injector_flow_convert", {
+      value: step1.lbPerHr as number,
+      from: "lb_hr",
+      fuelDensityGPerCc: 0.72
+    });
+    // Rounding at tool layer means we can only guarantee closeness, not exactness
+    expect(step2.ccPerMin as number).toBeCloseTo(550, 0);
+  });
+});
+
+describe("injector_flow_convert tool — result fields", () => {
+  it("includes ccPerMin, lbPerHr, fuelDensityGPerCc, note, inputs", () => {
+    const { server, registrations } = makeStubServer();
+    registerEngineBuildMathTools(server);
+    const r = callTool(registrations, "injector_flow_convert", {
+      value: 550,
+      from: "cc_min"
+    });
+    expect(typeof r.ccPerMin).toBe("number");
+    expect(typeof r.lbPerHr).toBe("number");
+    expect(typeof r.fuelDensityGPerCc).toBe("number");
+    expect(typeof r.note).toBe("string");
+    expect(r.inputs).toBeTruthy();
+  });
+});
+
+// ─── injector_size_required tool ─────────────────────────────────────────────
+// Pinned (bsfc 0.5, duty 0.85, density 0.72): 400 HP, 8 cyl
+//   totalFuelLbHr = 200, perInjectorLbHr ≈ 29.41, perInjectorCcMin ≈ 308.8
+
+describe("injector_size_required tool — pinned values (400 HP, 8 cyl)", () => {
+  it("totalFuelLbHr = 200, perInjectorLbHr ≈ 29.41, perInjectorCcMin ≈ 308.8", () => {
+    const { server, registrations } = makeStubServer();
+    registerEngineBuildMathTools(server);
+    const r = callTool(registrations, "injector_size_required", {
+      targetHp: 400,
+      cylinders: 8,
+      bsfc: 0.5,
+      maxDutyCycle: 0.85,
+      fuelDensityGPerCc: 0.72
+    });
+    expect(r.totalFuelLbHr).toBe(200);
+    // Full precision: 29.411764705882355 → rounds to 29.41 at 2dp
+    expect(r.perInjectorLbHr).toBe(29.41);
+    // Full precision: 308.818… → rounds to 308.8 at 1dp
+    expect(r.perInjectorCcMin).toBe(308.8);
+  });
+});
+
+describe("injector_size_required tool — result fields", () => {
+  it("includes perInjectorLbHr, perInjectorCcMin, totalFuelLbHr, assumptions, note", () => {
+    const { server, registrations } = makeStubServer();
+    registerEngineBuildMathTools(server);
+    const r = callTool(registrations, "injector_size_required", {
+      targetHp: 400,
+      cylinders: 8
+    });
+    expect(typeof r.perInjectorLbHr).toBe("number");
+    expect(typeof r.perInjectorCcMin).toBe("number");
+    expect(typeof r.totalFuelLbHr).toBe("number");
+    expect(r.assumptions).toBeTruthy();
+    expect(typeof r.note).toBe("string");
+    expect((r.note as string).length).toBeGreaterThan(0);
+  });
+});
+
+// ─── injector_max_hp tool ─────────────────────────────────────────────────────
+// Pinned (8 cyl, duty 0.85, bsfc 0.5, density 0.72): 550 cc/min
+//   injectorLbHr ≈ 52.38 (rounds to 52.38), maxHp ≈ 712.4
+//   Full precision: injectorLbHr = 52.38187…, maxHp = 712.393…
+//   Spec's "≈712.5" is a rounded approximation; actual is 712.4 at 1dp.
+
+describe("injector_max_hp tool — pinned values (550 cc/min, 8 cyl)", () => {
+  it("injectorLbHr ≈ 52.38, maxHp ≈ 712.4 (full precision 712.39; spec's 712.5 is rounded)", () => {
+    const { server, registrations } = makeStubServer();
+    registerEngineBuildMathTools(server);
+    const r = callTool(registrations, "injector_max_hp", {
+      injectorFlow: 550,
+      flowUnit: "cc_min",
+      cylinders: 8,
+      bsfc: 0.5,
+      maxDutyCycle: 0.85,
+      fuelDensityGPerCc: 0.72
+    });
+    // Full precision injectorLbHr = 52.38187622…, rounds to 52.38 at 2dp
+    expect(r.injectorLbHr).toBe(52.38);
+    // Full precision maxHp = 712.393516…, rounds to 712.4 at 1dp
+    expect(r.maxHp).toBe(712.4);
+    expect(r.injectorCcMin).toBe(550);
+  });
+});
+
+describe("injector_max_hp tool — result fields", () => {
+  it("includes maxHp, injectorLbHr, injectorCcMin, assumptions, note", () => {
+    const { server, registrations } = makeStubServer();
+    registerEngineBuildMathTools(server);
+    const r = callTool(registrations, "injector_max_hp", {
+      injectorFlow: 550,
+      flowUnit: "cc_min",
+      cylinders: 8
+    });
+    expect(typeof r.maxHp).toBe("number");
+    expect(typeof r.injectorLbHr).toBe("number");
+    expect(typeof r.injectorCcMin).toBe("number");
+    expect(r.assumptions).toBeTruthy();
+    expect(typeof r.note).toBe("string");
+  });
+});
+
+describe("injector_max_hp tool — round-trip with injector_size_required", () => {
+  it("size_required(400 HP, 8 cyl) → max_hp(perInjectorLbHr) → recovers ≈ 400 HP", () => {
+    const { server, registrations } = makeStubServer();
+    registerEngineBuildMathTools(server);
+    const sized = callTool(registrations, "injector_size_required", {
+      targetHp: 400,
+      cylinders: 8,
+      bsfc: 0.5,
+      maxDutyCycle: 0.85,
+      fuelDensityGPerCc: 0.72
+    });
+    // Use rounded tool output; round-trip through domain is exact, tool layer adds small rounding error
+    const maxed = callTool(registrations, "injector_max_hp", {
+      injectorFlow: sized.perInjectorLbHr as number,
+      flowUnit: "lb_hr",
+      cylinders: 8,
+      bsfc: 0.5,
+      maxDutyCycle: 0.85,
+      fuelDensityGPerCc: 0.72
+    });
+    // Tool rounds perInjectorLbHr to 2dp (29.41), so recovery is approximate
+    expect(maxed.maxHp as number).toBeCloseTo(400, 0);
   });
 });

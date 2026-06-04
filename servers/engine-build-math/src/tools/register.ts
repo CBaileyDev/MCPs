@@ -8,6 +8,11 @@ import {
   calcMeanPistonSpeed,
   calcEngineAirflowCfm
 } from "../domain/engine.js";
+import {
+  injectorFlowConvert,
+  injectorSizeRequired,
+  injectorMaxHp
+} from "../domain/injectors.js";
 
 export function registerEngineBuildMathTools(server: McpServer): void {
   // ── 1. displacement ─────────────────────────────────────────────────────────
@@ -196,6 +201,164 @@ export function registerEngineBuildMathTools(server: McpServer): void {
         cfm: parseFloat(r.cfm.toFixed(1)),
         note: r.note,
         inputs: r.inputs
+      });
+    }
+  );
+
+  // ── 6. injector_flow_convert ────────────────────────────────────────────────
+  server.registerTool(
+    "injector_flow_convert",
+    {
+      title: "Injector Flow Unit Converter",
+      description:
+        "Convert injector flow rate between cc/min and lb/hr. " +
+        "Returns BOTH ccPerMin and lbPerHr regardless of input unit. " +
+        "Conversion depends on fuel density; gasoline ≈ 0.72 g/cc, E85 ≈ 0.78 g/cc. " +
+        "Formula: lbPerHr = ccPerMin × (60 × density / 453.592); " +
+        "ccPerMin = lbPerHr × (453.592 / (60 × density)). " +
+        "With gasoline (0.72 g/cc) the factor reduces to the well-known ÷10.5 rule.",
+      inputSchema: {
+        value: z.number().positive().describe("Flow rate value to convert (must be > 0)"),
+        from: z
+          .enum(["cc_min", "lb_hr"])
+          .describe('Source unit: "cc_min" (cc per minute) or "lb_hr" (pounds per hour)'),
+        fuelDensityGPerCc: z
+          .number()
+          .positive()
+          .default(0.72)
+          .describe(
+            "Fuel density in g/cc (default 0.72 for gasoline; E85 ≈ 0.78; methanol ≈ 0.79)"
+          )
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    ({ value, from, fuelDensityGPerCc }) => {
+      const r = injectorFlowConvert(value, from, fuelDensityGPerCc);
+      return ok({
+        ccPerMin: parseFloat(r.ccPerMin.toFixed(2)),
+        lbPerHr: parseFloat(r.lbPerHr.toFixed(2)),
+        fuelDensityGPerCc: r.fuelDensityGPerCc,
+        note: r.note,
+        inputs: r.inputs
+      });
+    }
+  );
+
+  // ── 7. injector_size_required ───────────────────────────────────────────────
+  server.registerTool(
+    "injector_size_required",
+    {
+      title: "Required Injector Size Calculator",
+      description:
+        "Calculate the minimum injector flow rating needed to support a target horsepower. " +
+        "Returns required flow per injector in both lb/hr and cc/min. " +
+        "Formula: totalFuelLbHr = targetHp × bsfc; " +
+        "perInjectorLbHr = totalFuelLbHr / (cylinders × maxDutyCycle). " +
+        "BSFC ≈ 0.45–0.5 for naturally-aspirated gasoline; ≈ 0.55–0.65 for forced induction. " +
+        "80–85% max duty cycle is the usual safe ceiling; size up for headroom. " +
+        "Results are rule-of-thumb estimates, not guarantees.",
+      inputSchema: {
+        targetHp: z.number().positive().describe("Target horsepower (must be > 0)"),
+        cylinders: z
+          .number()
+          .int()
+          .positive()
+          .describe("Number of cylinders (positive integer)"),
+        bsfc: z
+          .number()
+          .positive()
+          .default(0.5)
+          .describe(
+            "Brake specific fuel consumption in lb/hr per HP (default 0.5; NA gas ≈ 0.45–0.5; forced ≈ 0.55–0.65)"
+          ),
+        maxDutyCycle: z
+          .number()
+          .positive()
+          .max(1)
+          .default(0.85)
+          .describe(
+            "Maximum injector duty cycle as a decimal 0–1 (default 0.85; safe ceiling is typically 0.80–0.85)"
+          ),
+        fuelDensityGPerCc: z
+          .number()
+          .positive()
+          .default(0.72)
+          .describe(
+            "Fuel density in g/cc (default 0.72 for gasoline; E85 ≈ 0.78; methanol ≈ 0.79)"
+          )
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    ({ targetHp, cylinders, bsfc, maxDutyCycle, fuelDensityGPerCc }) => {
+      const r = injectorSizeRequired(targetHp, cylinders, bsfc, maxDutyCycle, fuelDensityGPerCc);
+      return ok({
+        perInjectorLbHr: parseFloat(r.perInjectorLbHr.toFixed(2)),
+        perInjectorCcMin: parseFloat(r.perInjectorCcMin.toFixed(1)),
+        totalFuelLbHr: parseFloat(r.totalFuelLbHr.toFixed(2)),
+        assumptions: r.assumptions,
+        note: r.note
+      });
+    }
+  );
+
+  // ── 8. injector_max_hp ──────────────────────────────────────────────────────
+  server.registerTool(
+    "injector_max_hp",
+    {
+      title: "Injector Maximum HP Calculator",
+      description:
+        "Calculate the maximum horsepower an injector set can support at a given duty cycle. " +
+        "Formula: maxHp = injectorLbHr × cylinders × maxDutyCycle / bsfc. " +
+        "Supply injector flow in cc/min or lb/hr; the tool converts internally. " +
+        "BSFC ≈ 0.45–0.5 for naturally-aspirated gasoline; ≈ 0.55–0.65 for forced induction. " +
+        "80–85% max duty cycle is the usual safe ceiling. " +
+        "Results are rule-of-thumb estimates, not guarantees.",
+      inputSchema: {
+        injectorFlow: z
+          .number()
+          .positive()
+          .describe("Injector flow rating (must be > 0)"),
+        flowUnit: z
+          .enum(["cc_min", "lb_hr"])
+          .describe('Flow unit: "cc_min" (cc per minute) or "lb_hr" (pounds per hour)'),
+        cylinders: z
+          .number()
+          .int()
+          .positive()
+          .describe("Number of cylinders (positive integer)"),
+        bsfc: z
+          .number()
+          .positive()
+          .default(0.5)
+          .describe(
+            "Brake specific fuel consumption in lb/hr per HP (default 0.5; NA gas ≈ 0.45–0.5; forced ≈ 0.55–0.65)"
+          ),
+        maxDutyCycle: z
+          .number()
+          .positive()
+          .max(1)
+          .default(0.85)
+          .describe(
+            "Maximum injector duty cycle as a decimal 0–1 (default 0.85; safe ceiling is typically 0.80–0.85)"
+          ),
+        fuelDensityGPerCc: z
+          .number()
+          .positive()
+          .default(0.72)
+          .describe(
+            "Fuel density in g/cc (default 0.72 for gasoline; E85 ≈ 0.78; methanol ≈ 0.79)"
+          )
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    ({ injectorFlow, flowUnit, cylinders, bsfc, maxDutyCycle, fuelDensityGPerCc }) => {
+      const r = injectorMaxHp(injectorFlow, flowUnit, cylinders, bsfc, maxDutyCycle, fuelDensityGPerCc);
+      return ok({
+        maxHp: parseFloat(r.maxHp.toFixed(1)),
+        injectorLbHr: parseFloat(r.injectorLbHr.toFixed(2)),
+        injectorCcMin: parseFloat(r.injectorCcMin.toFixed(2)),
+        assumptions: r.assumptions,
+        note: r.note
       });
     }
   );

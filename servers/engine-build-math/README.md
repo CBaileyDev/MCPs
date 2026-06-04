@@ -11,6 +11,9 @@ Pure-math MCP server for engine builder calculations. No API key required; all r
 | `bore_stroke_ratio` | Calculates bore-to-stroke ratio and classifies engine character (oversquare / square / undersquare) |
 | `mean_piston_speed` | Calculates mean piston speed (ft/min and m/s) from stroke and RPM |
 | `engine_airflow_cfm` | Calculates engine airflow demand in CFM from displacement, RPM, and volumetric efficiency |
+| `injector_flow_convert` | Converts injector flow between cc/min and lb/hr (both directions, returns both units); accounts for fuel density |
+| `injector_size_required` | Calculates the minimum injector flow rating (lb/hr and cc/min) needed to support a target horsepower, given cylinders, BSFC, and duty cycle |
+| `injector_max_hp` | Calculates the maximum horsepower an injector set can support at a given flow rating, cylinder count, BSFC, and duty cycle |
 
 ## Notes
 
