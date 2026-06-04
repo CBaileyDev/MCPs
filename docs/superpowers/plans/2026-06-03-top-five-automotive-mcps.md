@@ -1,5 +1,15 @@
 # Top Five Automotive MCPs Implementation Plan
 
+> **STATUS: ✅ COMPLETE (2026-06-03).** All five servers implemented under `servers/`,
+> each self-contained in the repo house style (zod v4, `registerTool` idiom,
+> co-located `src/**/*.test.ts`). Aggregate: **38 tools, 228 tests**, all
+> typecheck/build/test green and verified over the live MCP stdio handshake.
+> Deviations from the original plan: tests are co-located in `src/` (matching the
+> existing servers) rather than a separate `test/` dir; OBD live serial is a
+> mocked pure-TS boundary (no `serialport`/native dep) with log-parsing as the
+> v1 focus; FuelEconomy.gov is read as JSON via the `Accept` header; `plan_ev_route`
+> is an honest feasibility estimate over provided distances, not road routing.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the next five automotive MCP servers: vehicle context/fitment, OBD diagnostics, fuel economy/emissions, local auto services, and EV charging/range.

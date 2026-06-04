@@ -13,6 +13,11 @@ Codex, and other MCP clients to useful tools and public data sources.
 | [Repair Info](./servers/repair-info) | ✅ Working | Recalls, complaints, safety ratings (NHTSA) + generic maintenance schedule. |
 | [Part Interchange](./servers/part-interchange) | 🔲 Scaffold | OEM ↔ aftermarket cross-reference. Needs a licensed data provider. |
 | [Marketplace Pricing](./servers/marketplace-pricing) | 🔲 Scaffold | Parts price comparison. Needs marketplace API credentials (e.g. eBay). |
+| [Vehicle Context & Fitment](./servers/vehicle-context-fitment) | ✅ Working | Canonical vehicle profile with per-attribute confidence and missing/conflicting fitment attributes (local). |
+| [OBD Diagnostics](./servers/obd-diagnostics) | ✅ Working | Scan-log parsing + mocked OBD-II adapter: DTCs, readiness, freeze frames, PIDs (read-only, no native deps). |
+| [Fuel Economy & Emissions](./servers/fuel-economy-emissions) | ✅ Working | MPG/MPGe, emissions, and trip/annual cost (FuelEconomy.gov, no key). |
+| [Local Auto Services](./servers/local-auto-services) | ✅ Working | Nearby repair/tire/parts/fuel/inspection/towing via OpenStreetMap Overpass (no key). |
+| [EV Charging & Range](./servers/ev-charging-range) | ✅ Working | EV charger lookup (NREL AFDC + Open Charge Map) + conservative range planning. AFDC works with `DEMO_KEY`. |
 
 The two scaffolds expose their full tool surface but return a clear
 "provider not configured" error until a data source is wired in. No
@@ -28,7 +33,13 @@ servers/
   repair-info/
   part-interchange/
   marketplace-pricing/
+  vehicle-context-fitment/
+  obd-diagnostics/
+  fuel-economy-emissions/
+  local-auto-services/
+  ev-charging-range/
 docs/
+  roadmaps/
   superpowers/
     specs/
     plans/
