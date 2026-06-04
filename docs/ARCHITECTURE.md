@@ -32,8 +32,8 @@ in isolation:
 
 - **Free/public data or pure computation first.** Servers lean on free APIs
   (NHTSA vPIC, NHTSA recalls, FuelEconomy.gov, OpenStreetMap Overpass, NREL AFDC)
-  or pure math (tire fitment, gearing, unit conversion, electrical, vehicle-
-  context confidence). Proprietary data
+  or pure math (tire fitment, gearing, unit conversion, electrical, engine
+  math, vehicle-context confidence). Proprietary data
   (OEM service schedules, part interchange, live marketplace pricing) is behind
   provider interfaces and clearly marked when unconfigured.
 - **Never fabricate.** Tools return evidence, confidence, and explicit
@@ -55,8 +55,9 @@ the MCP client/agent layer. The intended data flow:
    ratings + maintenance), `fuel-economy-emissions`, `tire-wheel-fitment`,
    `drivetrain-gearing`, `obd-diagnostics` (scan-log evidence),
    `local-auto-services`, `ev-charging-range`. `automotive-unit-converter`
-   (shop-manual unit conversions) and `automotive-electrical` (12V/24V DC wiring,
-   fuse, and battery math) are stateless helpers that need no identity.
+   (shop-manual unit conversions), `automotive-electrical` (12V/24V DC wiring,
+   fuse, and battery math), and `engine-build-math` (displacement, compression
+   ratio, airflow) are stateless helpers that need no identity.
 3. **Persistence** — `garage-memory` stores vehicles, searches, preferred
    brands, and project builds locally so results feel personalized.
 4. **Parts** — `rockauto-catalog-search`, `part-interchange`,
