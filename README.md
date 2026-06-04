@@ -64,5 +64,6 @@ workspace root.
 
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — conventions, design principles, and how the servers relate.
 - [docs/USING-WITH-CLIENTS.md](./docs/USING-WITH-CLIENTS.md) — build the servers and wire them into an MCP client (combined config).
+- [docs/RECIPES.md](./docs/RECIPES.md) — cross-server workflows (vet a used car, plus-size tires, chase a check-engine light, plan an EV trip, wire an accessory, spec an engine build).
 - [docs/SMOKE-TESTS.md](./docs/SMOKE-TESTS.md) — opt-in live smoke tests that hit the real APIs to catch upstream drift.
 - CI: every server is built and tested on each push via [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) (hermetic, no secrets). A separate, non-gating [`smoke.yml`](./.github/workflows/smoke.yml) runs the live smoke tests weekly and on demand.

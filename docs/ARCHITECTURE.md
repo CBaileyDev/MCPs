@@ -77,5 +77,6 @@ errors, and are kept out of the gating matrix. See
 [SMOKE-TESTS.md](./SMOKE-TESTS.md).
 
 See [USING-WITH-CLIENTS.md](./USING-WITH-CLIENTS.md) to wire the servers into a
-client, and [`roadmaps/`](./roadmaps/) / [`superpowers/specs/`](./superpowers/specs/)
-for design history.
+client, [RECIPES.md](./RECIPES.md) for concrete cross-server workflows, and
+[`roadmaps/`](./roadmaps/) / [`superpowers/specs/`](./superpowers/specs/) for
+design history.
