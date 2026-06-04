@@ -31,6 +31,7 @@ jobs:
           - tire-wheel-fitment
           - drivetrain-gearing
           - automotive-unit-converter
+          - automotive-electrical
     defaults:
       run:
         working-directory: servers/${{ matrix.server }}
