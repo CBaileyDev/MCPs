@@ -120,9 +120,16 @@ export interface OcmPoi {
   Connections?: OcmConnection[];
 }
 
-/** Normalise a raw OCM POI record into a unified ChargingStation. */
-export function fromOcm(poi: OcmPoi): ChargingStation {
+/**
+ * Normalise a raw OCM POI record into a unified ChargingStation, or return
+ * null when the POI has no usable coordinates — we never place a station at
+ * (0, 0) / Null Island.
+ */
+export function fromOcm(poi: OcmPoi): ChargingStation | null {
   const addr = poi.AddressInfo;
+  if (addr?.Latitude == null || addr?.Longitude == null) {
+    return null;
+  }
   const addressParts = [addr?.AddressLine1, addr?.Town, addr?.StateOrProvince].filter(Boolean);
   const address = addressParts.length ? addressParts.join(", ") : undefined;
 
@@ -158,8 +165,8 @@ export function fromOcm(poi: OcmPoi): ChargingStation {
     }
   }
 
-  const lat = addr?.Latitude ?? 0;
-  const lon = addr?.Longitude ?? 0;
+  const lat = addr.Latitude;
+  const lon = addr.Longitude;
 
   const result: ChargingStation = {
     id: String(poi.ID),

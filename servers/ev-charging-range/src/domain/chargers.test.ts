@@ -96,7 +96,7 @@ describe("fromAfdc", () => {
 
 describe("fromOcm", () => {
   it("maps the documented OCM POI correctly", () => {
-    const station = fromOcm(OCM_SAMPLE);
+    const station = fromOcm(OCM_SAMPLE)!;
     expect(station.id).toBe("12345");
     expect(station.source).toBe("ocm");
     expect(station.name).toBe("Test Charger");
@@ -112,7 +112,7 @@ describe("fromOcm", () => {
   });
 
   it("maps operational status correctly with staleness note", () => {
-    const station = fromOcm(OCM_SAMPLE);
+    const station = fromOcm(OCM_SAMPLE)!;
     expect(station.status).toBe("Operational");
     expect(station.statusNote).toContain("stale");
   });
@@ -122,25 +122,30 @@ describe("fromOcm", () => {
       ...OCM_SAMPLE,
       StatusType: { IsOperational: false, Title: "Not Operational" }
     };
-    const station = fromOcm(poi);
+    const station = fromOcm(poi)!;
     expect(station.status).toBe("Not Operational");
   });
 
   it("leaves status undefined when StatusType is null", () => {
     const poi: OcmPoi = { ...OCM_SAMPLE, StatusType: null };
-    const station = fromOcm(poi);
+    const station = fromOcm(poi)!;
     expect(station.status).toBeUndefined();
     expect(station.statusNote).toBeUndefined();
   });
 
   it("leaves status undefined when StatusType omitted", () => {
     const poi: OcmPoi = { ...OCM_SAMPLE, StatusType: undefined };
-    const station = fromOcm(poi);
+    const station = fromOcm(poi)!;
     expect(station.status).toBeUndefined();
   });
 
   it("maps DC fast count from IsFastChargeCapable connections", () => {
-    const station = fromOcm(OCM_SAMPLE);
+    const station = fromOcm(OCM_SAMPLE)!;
     expect(station.dcFastCount).toBe(2);
+  });
+
+  it("returns null when the POI has no coordinates (never places it at Null Island)", () => {
+    const poi: OcmPoi = { ID: 999, AddressInfo: { Title: "No Coords" } };
+    expect(fromOcm(poi)).toBeNull();
   });
 });

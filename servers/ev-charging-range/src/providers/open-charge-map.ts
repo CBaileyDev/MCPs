@@ -38,5 +38,8 @@ export async function findNearby(params: FindNearbyParams): Promise<ChargingStat
   const url = `${OCM_BASE}/poi/?${qs.toString()}`;
   const data = await fetchJson<OcmPoi[]>(url);
 
-  return (data ?? []).map(fromOcm);
+  // Drop POIs without usable coordinates (fromOcm returns null for them).
+  return (data ?? [])
+    .map(fromOcm)
+    .filter((s): s is ChargingStation => s !== null);
 }
