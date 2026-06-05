@@ -19,6 +19,7 @@ import { Elm327Client } from "./obd/elm327.js";
 import { ReplayTransport } from "./obd/replay-transport.js";
 import { DEMO_VEHICLE } from "./obd/recordings.js";
 import { openSerialTransport } from "./obd/serial-transport.js";
+import { SimulatedObdReader } from "./obd/simulator.js";
 import type { ObdReader } from "./obd/reader.js";
 import { runDiagnosticSession } from "./diagnose/session.js";
 import { buildReport } from "./diagnose/report.js";
@@ -66,6 +67,11 @@ function num(flags: Flags["flags"], key: string): number {
 
 async function makeReader(flags: Flags["flags"]): Promise<{ reader: ObdReader; demo: boolean }> {
   const port = typeof flags.port === "string" ? flags.port : undefined;
+  // --sim uses the time-varying simulator (nice for `monitor`); otherwise the
+  // replay adapter drives the real ELM327 parser with canned frames.
+  if (flags.sim === true) {
+    return { reader: new SimulatedObdReader(), demo: true };
+  }
   const useDemo = flags.demo === true || port === undefined;
   if (useDemo) {
     return { reader: new Elm327Client(new ReplayTransport(DEMO_VEHICLE)), demo: true };
@@ -103,7 +109,7 @@ async function cmdDiagnose(f: Flags): Promise<void> {
     const snapshot = await runDiagnosticSession(reader);
     const label = typeof f.flags.vehicle === "string" ? f.flags.vehicle : undefined;
     const report = buildReport(snapshot, label);
-    if (demo) console.log("(offline demo — replaying a canned vehicle; pass --port for real hardware)\n");
+    if (demo) console.log("(offline demo — no adapter connected; pass --port for real hardware)\n");
     console.log(report.text);
   } finally {
     await reader.close();
@@ -122,7 +128,7 @@ async function cmdMonitor(f: Flags): Promise<void> {
     await reader.initialize();
     const series = await recordSeries(reader, { pids, rounds, intervalMs });
     const report = analyzeTrends(series);
-    if (demo) console.log("(offline demo — values are static in replay; flags still illustrate the analysis)\n");
+    if (demo) console.log("(offline demo — no adapter connected; pass --port for real hardware, or --sim for moving data)\n");
     console.log("# Monitor — per-parameter trends");
     for (const s of report.stats) {
       console.log(
@@ -198,8 +204,8 @@ function usage(): void {
   console.log(`garage-copilot <command> [flags]
 
 Commands:
-  diagnose    [--port PATH | --demo] [--baud N] [--vehicle "label"]
-  monitor     [--port PATH | --demo] [--rounds N] [--interval MS] [--pids 0C,05,...]
+  diagnose    [--port PATH | --demo | --sim] [--baud N] [--vehicle "label"]
+  monitor     [--port PATH | --demo | --sim] [--rounds N] [--interval MS] [--pids 0C,05,...]
   advise      final-drive --speed --tire --gear --from --to
               injectors   --hp --cylinders [--bsfc --duty --density --injector]
               load        --voltage --existing --watts --alt
