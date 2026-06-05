@@ -23,6 +23,12 @@ export type WebSerialOptions = {
   /** Baud rate (ELM327 USB clones default to 38400). */
   baudRate?: number;
   description?: string;
+  /**
+   * Called if the read loop fails unexpectedly (e.g. the adapter is unplugged).
+   * Not called for an intentional {@link WebSerialTransport.close}. Lets the UI
+   * react to a dropped connection instead of silently freezing.
+   */
+  onError?: (error: Error) => void;
 };
 
 export class WebSerialTransport implements ObdTransport {
@@ -35,10 +41,12 @@ export class WebSerialTransport implements ObdTransport {
   private reader?: ReadableStreamDefaultReader<Uint8Array>;
   private pumpDone?: Promise<void>;
   private closed = false;
+  private readonly onError?: (error: Error) => void;
 
   constructor(private readonly port: SerialPortLike, options: WebSerialOptions = {}) {
     this.baudRate = options.baudRate ?? 38400;
     this.description = options.description ?? "Web Serial OBD-II adapter";
+    this.onError = options.onError;
   }
 
   /** Open the port and start pumping bytes to listeners. Call once before use. */
@@ -66,8 +74,13 @@ export class WebSerialTransport implements ObdTransport {
           }
         }
       }
-    } catch {
-      // Reader cancelled / port closed — stop quietly.
+    } catch (err) {
+      // A throw here while we are NOT closing means the adapter dropped (USB
+      // unplug, power loss). Surface it so the UI can recover; stay quiet when
+      // the throw is just our own close() cancelling the read.
+      if (!this.closed) {
+        this.onError?.(err instanceof Error ? err : new Error(String(err)));
+      }
     } finally {
       // Release the lock here (after the read loop has actually stopped) so
       // close() can shut the port without a "still locked" error — which is what

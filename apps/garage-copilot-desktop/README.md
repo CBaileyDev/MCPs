@@ -85,6 +85,26 @@ window + serial picker  ◀──▶  Web Serial ▶ Garage Copilot engine
 - **Demo mode** swaps the Web Serial transport for the engine's replay transport,
   so the entire UI works with no hardware.
 
+## Security
+
+The app follows the Electron security checklist and is locked to its single job
+(read OBD-II over Web Serial), so the attack surface stays tiny:
+
+- **Renderer isolation** — `contextIsolation` + `sandbox` on, `nodeIntegration`
+  off, and `webSecurity` / `allowRunningInsecureContent` / `experimentalFeatures`
+  pinned explicitly so a future Electron default can't weaken them.
+- **CSP** — set both as a `<meta>` and as a response header; everything is
+  `'self'` and `connect-src 'none'` (the renderer makes no network requests).
+- **No drifting** — `will-navigate` / `will-redirect` are blocked, and external
+  links open in the OS browser only if they pass a strict https allowlist
+  (rejects `http:`, embedded credentials, and look-alike hosts).
+- **Least privilege** — every permission request is denied except Web Serial;
+  IPC messages from any non-`file://` frame are rejected.
+- **Hardened binary** — packaging flips Electron fuses (no RunAsNode, no Node
+  CLI inspector, cookie encryption) via the `afterPack` hook.
+- **Dropped adapter** — an unplugged dongle surfaces a clear "disconnected"
+  message instead of a silently frozen UI.
+
 ## Develop
 
 ```bash

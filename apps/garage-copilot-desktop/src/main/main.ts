@@ -8,10 +8,33 @@
  * nothing to rebuild against Electron's ABI.
  */
 
-import { app, BrowserWindow, ipcMain, Menu, session, shell, type IpcMainEvent, type MenuItemConstructorOptions } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, session, shell, type IpcMainEvent, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from "electron";
 import { join } from "node:path";
 import { readFile, writeFile, rename, mkdir } from "node:fs/promises";
 import { IPC, type AppInfo, type HistoryRecord, type SerialPortInfo } from "../shared/ipc.js";
+import { isAllowedExternalUrl, isTrustedFrameUrl } from "./url-allowlist.js";
+
+/**
+ * Content Security Policy applied as a response header (defense in depth beyond
+ * the <meta> in index.html). The renderer loads only its own bundle and makes no
+ * network requests, so everything is locked to 'self' and outbound connections
+ * are blocked. 'unsafe-inline' is kept for styles only, which the UI relies on.
+ */
+const CSP =
+  "default-src 'self'; " +
+  "script-src 'self'; " +
+  "style-src 'self' 'unsafe-inline'; " +
+  "img-src 'self' data:; " +
+  "font-src 'self'; " +
+  "connect-src 'none'; " +
+  "object-src 'none'; " +
+  "base-uri 'self'; " +
+  "form-action 'none'";
+
+/** Reject IPC from any frame that is not our bundled (file://) renderer. */
+function isTrustedSender(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
+  return isTrustedFrameUrl(event.senderFrame?.url);
+}
 
 const HISTORY_CAP = 100;
 const historyFile = (): string => join(app.getPath("userData"), "garage-copilot-history.json");
@@ -40,6 +63,48 @@ const appPath = (...parts: string[]): string => join(app.getAppPath(), ...parts)
 /** Pending `select-serial-port` callback awaiting the renderer's choice. */
 let pendingPortCallback: ((portId: string) => void) | null = null;
 
+/**
+ * One-time hardening of the default session: attach the CSP response header and
+ * lock permissions down to Web Serial only (the app's single capability).
+ */
+function hardenDefaultSession(): void {
+  const ses = session.defaultSession;
+  ses.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: { ...details.responseHeaders, "Content-Security-Policy": [CSP] }
+    });
+  });
+  ses.setPermissionCheckHandler((_wc, permission) => permission === "serial");
+  // Web Serial is granted via the check + device handlers below; every other
+  // permission request (notifications, media, geolocation, …) is denied.
+  ses.setPermissionRequestHandler((_wc, _permission, done) => done(false));
+  ses.setDevicePermissionHandler(details => details.deviceType === "serial");
+}
+
+// Navigation hardening, registered once for every web contents the app creates.
+app.on("web-contents-created", (_event, contents) => {
+  // Keep the renderer pinned to the bundled app; never let it navigate or be
+  // redirected to a remote origin (a classic XSS-to-takeover lever).
+  const blockOffApp = (event: Electron.Event, url: string): void => {
+    let isLocal = false;
+    try {
+      isLocal = new URL(url).protocol === "file:";
+    } catch {
+      isLocal = false;
+    }
+    if (!isLocal) event.preventDefault();
+  };
+  contents.on("will-navigate", blockOffApp);
+  contents.on("will-redirect", blockOffApp);
+
+  // External links (e.g. DTC look-ups) open in the OS browser — and only if they
+  // pass the strict allowlist. The window itself never opens a child window.
+  contents.setWindowOpenHandler(({ url }) => {
+    if (isAllowedExternalUrl(url)) void shell.openExternal(url);
+    return { action: "deny" };
+  });
+});
+
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1140,
@@ -52,21 +117,16 @@ function createWindow(): BrowserWindow {
       preload: appPath("dist", "main", "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      // Defaults already, but pinned explicitly so a future Electron default
+      // change can't silently weaken the renderer's isolation.
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      experimentalFeatures: false
     }
   });
 
-  // Open external links (e.g. DTC look-ups) in the OS browser, never in-app.
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith("https://")) void shell.openExternal(url);
-    return { action: "deny" };
-  });
-
   const ses = win.webContents.session;
-
-  // Allow the renderer to use the Web Serial API.
-  ses.setPermissionCheckHandler((_wc, permission) => permission === "serial");
-  ses.setDevicePermissionHandler(details => details.deviceType === "serial");
 
   // When the renderer calls navigator.serial.requestPort(), Electron asks us to
   // choose. Forward the candidates to the renderer's picker and wait.
@@ -90,16 +150,21 @@ function createWindow(): BrowserWindow {
   return win;
 }
 
-ipcMain.on(IPC.SerialChoose, (_event: IpcMainEvent, portId: string) => {
+ipcMain.on(IPC.SerialChoose, (event: IpcMainEvent, portId: string) => {
+  if (!isTrustedSender(event)) return;
   if (pendingPortCallback) {
     pendingPortCallback(typeof portId === "string" ? portId : "");
     pendingPortCallback = null;
   }
 });
 
-ipcMain.handle(IPC.HistoryList, (): Promise<HistoryRecord[]> => readHistory());
+ipcMain.handle(IPC.HistoryList, (event): Promise<HistoryRecord[]> => {
+  if (!isTrustedSender(event)) throw new Error("Untrusted IPC sender");
+  return readHistory();
+});
 
-ipcMain.handle(IPC.HistorySave, async (_event, record: HistoryRecord): Promise<HistoryRecord[]> => {
+ipcMain.handle(IPC.HistorySave, async (event, record: HistoryRecord): Promise<HistoryRecord[]> => {
+  if (!isTrustedSender(event)) throw new Error("Untrusted IPC sender");
   const records = await readHistory();
   records.unshift(record); // newest first
   const capped = records.slice(0, HISTORY_CAP);
@@ -107,16 +172,20 @@ ipcMain.handle(IPC.HistorySave, async (_event, record: HistoryRecord): Promise<H
   return capped;
 });
 
-ipcMain.handle(IPC.HistoryClear, async (): Promise<void> => {
+ipcMain.handle(IPC.HistoryClear, async (event): Promise<void> => {
+  if (!isTrustedSender(event)) throw new Error("Untrusted IPC sender");
   await writeHistory([]);
 });
 
-ipcMain.handle(IPC.AppInfo, (): AppInfo => ({
-  appVersion: app.getVersion(),
-  electron: process.versions.electron ?? "",
-  chrome: process.versions.chrome ?? "",
-  platform: process.platform
-}));
+ipcMain.handle(IPC.AppInfo, (event): AppInfo => {
+  if (!isTrustedSender(event)) throw new Error("Untrusted IPC sender");
+  return {
+    appVersion: app.getVersion(),
+    electron: process.versions.electron ?? "",
+    chrome: process.versions.chrome ?? "",
+    platform: process.platform
+  };
+});
 
 /** A standard role-based menu so Cmd+Q/Copy/Paste/Reload behave natively. */
 function buildMenu(): Menu {
@@ -146,6 +215,7 @@ function buildMenu(): Menu {
 }
 
 void app.whenReady().then(() => {
+  hardenDefaultSession();
   Menu.setApplicationMenu(buildMenu());
   createWindow();
   app.on("activate", () => {

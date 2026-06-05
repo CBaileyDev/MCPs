@@ -146,7 +146,10 @@ async function connectSerial(): Promise<void> {
   try {
     const port = await navigator.serial.requestPort();
     const baudRate = Number($<HTMLSelectElement>("baud").value) || 38400;
-    const transport = new WebSerialTransport(port, { baudRate });
+    const transport = new WebSerialTransport(port, {
+      baudRate,
+      onError: () => handleTransportLost()
+    });
     await transport.start();
     adapterLog.length = 0;
     // 4s per command keeps live polling responsive and fails fast on a dead
@@ -178,6 +181,20 @@ async function disconnect(): Promise<void> {
   conn = null;
   show($("btn-live-export"), false);
   setStatus("Disconnected", "off");
+  setConnectedUi(false);
+}
+
+/**
+ * The serial adapter dropped mid-session (e.g. unplugged). Tear the UI back down
+ * to a disconnected state with a clear message instead of leaving live cards
+ * frozen on stale values.
+ */
+function handleTransportLost(): void {
+  if (!conn) return; // already disconnected
+  stopLive();
+  conn = null;
+  show($("btn-live-export"), false);
+  setStatus("Adapter disconnected — check the cable, then reconnect.", "off");
   setConnectedUi(false);
 }
 
