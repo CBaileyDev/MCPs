@@ -1,0 +1,22 @@
+# electron-builder config. Run `npm run dist` ON A MAC to produce a .dmg/.zip.
+# (Building a macOS target requires macOS.) The output goes to release/ so it
+# does not collide with esbuild's dist/ bundles.
+appId: com.cbaileydev.garagecopilot
+productName: Garage Copilot
+directories:
+  output: release
+# Everything the app needs at runtime is bundled into dist/ by esbuild (the
+# engine is inlined into the renderer bundle), so only dist/ + package.json ship.
+files:
+  - dist/**/*
+  - package.json
+asar: true
+mac:
+  category: public.app-category.utilities
+  target:
+    - dmg
+    - zip
+  # Unsigned local build. For distribution, configure signing/notarization.
+  identity: null
+dmg:
+  title: Garage Copilot

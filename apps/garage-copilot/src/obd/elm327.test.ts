@@ -49,6 +49,20 @@ describe("Elm327Client against the demo vehicle", () => {
     const { client } = demoClient();
     expect(await client.readVoltage()).toBe(14.2);
   });
+
+  it("serializes concurrent commands so responses don't interleave (half-duplex)", async () => {
+    const { client } = demoClient();
+    // Fired together; the internal queue must run them one-at-a-time in order so
+    // each gets its own clean response rather than a cross-contaminated buffer.
+    const [rpm, coolant, volts] = await Promise.all([
+      client.readLivePid("0C"),
+      client.readLivePid("05"),
+      client.readLivePid("42")
+    ]);
+    expect(rpm?.value).toBe(812);
+    expect(coolant?.value).toBe(89);
+    expect(volts?.value).toBe(14.2);
+  });
 });
 
 describe("Elm327Client robustness", () => {

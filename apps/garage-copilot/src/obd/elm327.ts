@@ -57,6 +57,9 @@ const ERROR_TOKENS = ["UNABLE TO CONNECT", "BUS INIT: ERROR", "BUS ERROR", "CAN 
 
 export class Elm327Client implements ObdReader {
   private readonly timeoutMs: number;
+  /** Serializes commands: the OBD link is half-duplex, so overlapping reads
+   * (e.g. live polling racing a scan) must not interleave on the wire. */
+  private queue: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly transport: ObdTransport, options: Elm327Options = {}) {
     this.timeoutMs = options.timeoutMs ?? 5000;
@@ -64,11 +67,22 @@ export class Elm327Client implements ObdReader {
 
   /**
    * Write a single command and collect the response up to the ELM327 ">" prompt.
+   * Commands are queued so concurrent callers run one-at-a-time in call order.
    * Returns the response split into trimmed, non-empty lines with the prompt and
    * any command echo removed. Rejects if the prompt is not seen within the
    * configured timeout.
    */
   async send(command: string): Promise<string[]> {
+    const run = this.queue.then(() => this.sendNow(command));
+    // Keep the chain alive even if this command rejects.
+    this.queue = run.then(
+      () => undefined,
+      () => undefined
+    );
+    return run;
+  }
+
+  private async sendNow(command: string): Promise<string[]> {
     let buffer = "";
     let unsubscribe: (() => void) | undefined;
 
