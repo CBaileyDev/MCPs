@@ -81,7 +81,12 @@ app
 
     // History — the scan auto-saved; show the saved-scan list + detail.
     await win.webContents.executeJavaScript(`document.querySelector('[data-tab="history"]').click();`);
-    await sleep(500);
+    await sleep(900);
+    // The list fills asynchronously (IPC round-trip), then the detail renders.
+    // Prime a throwaway frame so the offscreen compositor paints the inserted
+    // rows before the real capture — otherwise they can come out blank.
+    await win.webContents.capturePage();
+    await sleep(300);
     await capture(win, "history.png");
 
     app.exit(0);

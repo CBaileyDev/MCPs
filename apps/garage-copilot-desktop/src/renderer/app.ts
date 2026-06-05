@@ -47,9 +47,67 @@ let lastSnapshot: DiagnosticSnapshot | null = null;
 let lastLabel: string | undefined;
 let liveTimer: number | null = null;
 let liveSamples: TimedSample[] = [];
-type LiveCard = { valueEl: HTMLElement; canvas: HTMLCanvasElement };
+type Zone = "ok" | "watch" | "warn";
+type LiveCard = { card: HTMLElement; numEl: HTMLElement; unitEl: HTMLElement; canvas: HTMLCanvasElement };
+type HeroGauge = { canvas: HTMLCanvasElement; value: number; unit?: string };
 const liveCards = new Map<string, LiveCard>();
+const heroCards = new Map<string, HeroGauge>();
 const liveHistory = new Map<string, number[]>();
+
+/** Instrument-cluster palette + fonts, mirrored for <canvas> (CSS can't reach it). */
+const COLORS = {
+  text: "#eef2f8",
+  muted: "#93a0b4",
+  track: "#222c39",
+  live: "#28d8ff",
+  accent: "#ff7a18",
+  ok: "#3ad17a",
+  watch: "#ffb02e",
+  warn: "#ff5142",
+  redline: "#ff2a2a"
+} as const;
+const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+const COND = '"Bahnschrift", "DIN Alternate", "Segoe UI", system-ui, sans-serif';
+
+/** Per-PID gauge range + warn/watch thresholds, in metric units (display converts). */
+type GaugeSpec = { min: number; max: number; watchHigh?: number; warnHigh?: number; watchLow?: number; warnLow?: number; redline?: number };
+const GAUGE_SPECS: Record<string, GaugeSpec> = {
+  "0C": { min: 0, max: 8000, watchHigh: 5500, warnHigh: 6500, redline: 6500 }, // Engine RPM
+  "0D": { min: 0, max: 240 }, // Vehicle speed (km/h)
+  "05": { min: 40, max: 130, watchHigh: 105, warnHigh: 115 }, // Coolant °C
+  "04": { min: 0, max: 100, watchHigh: 85, warnHigh: 95 }, // Engine load %
+  "11": { min: 0, max: 100 }, // Throttle %
+  "2F": { min: 0, max: 100, watchLow: 15, warnLow: 7 }, // Fuel level %
+  "42": { min: 11, max: 15, warnLow: 12.0, watchLow: 12.4, watchHigh: 14.9 }, // Module voltage
+  "0F": { min: -10, max: 90, watchHigh: 60, warnHigh: 75 }, // Intake air °C
+  "5C": { min: 40, max: 160, watchHigh: 130, warnHigh: 150 }, // Oil temp °C
+  "06": { min: -25, max: 25, watchHigh: 10, warnHigh: 20, watchLow: -10, warnLow: -20 }, // STFT %
+  "07": { min: -25, max: 25, watchHigh: 10, warnHigh: 20, watchLow: -10, warnLow: -20 } // LTFT %
+};
+/** PIDs promoted to big radial gauges at the top of the live view, in order. */
+const HERO_PIDS = ["0C", "0D", "05"];
+const HERO_LABEL: Record<string, string> = { "0C": "RPM", "0D": "Speed", "05": "Coolant" };
+
+/** Which alert zone a reading falls in for its PID (null = no thresholds defined). */
+function zoneFor(pid: string, value: number): Zone | null {
+  const s = GAUGE_SPECS[pid];
+  if (!s) return null;
+  if ((s.warnHigh !== undefined && value >= s.warnHigh) || (s.warnLow !== undefined && value <= s.warnLow)) return "warn";
+  if ((s.watchHigh !== undefined && value >= s.watchHigh) || (s.watchLow !== undefined && value <= s.watchLow)) return "watch";
+  return "ok";
+}
+function zoneColor(zone: Zone | null): string {
+  return zone === "warn" ? COLORS.warn : zone === "watch" ? COLORS.watch : zone === "ok" ? COLORS.ok : COLORS.live;
+}
+
+/** Gauge/tile readout precision: integers for big values (RPM, speed), more
+ *  decimals for small ones (volts, flow). Display-only — never touches data. */
+function fmtReadout(n: number): string {
+  const a = Math.abs(n);
+  if (a >= 100) return String(Math.round(n));
+  if (a >= 10) return String(Math.round(n * 10) / 10);
+  return String(Math.round(n * 100) / 100);
+}
 // Fallback PIDs when capability discovery is unavailable or empty.
 const DEFAULT_LIVE_PIDS = ["0C", "0D", "05", "0F", "11", "06", "07", "42"];
 // Preferred display order (most useful first); the rest follow.
@@ -276,7 +334,20 @@ function renderReport(
 
   const head = document.createElement("div");
   head.className = "report-headline";
-  head.textContent = headline;
+  const milOn = /\bMIL\b[^.]*\bON\b/i.test(headline);
+  const milOff = /\bMIL\b[^.]*\b(off|ok)\b/i.test(headline);
+  if (milOn) {
+    head.classList.add("is-warn");
+    head.appendChild(milLampSvg());
+  } else if (milOff) {
+    head.classList.add("is-ok");
+    const lamp = document.createElement("span");
+    lamp.className = "lamp lamp--ok";
+    head.appendChild(lamp);
+  }
+  const headText = document.createElement("span");
+  headText.textContent = headline;
+  head.appendChild(headText);
   out.appendChild(head);
 
   for (const section of sections) {
@@ -288,16 +359,29 @@ function renderReport(
     for (const line of section.lines) {
       const row = document.createElement("div");
       row.className = lineSeverityClass(line);
-      row.textContent = line;
       const code = dtcCodeInLine(line);
-      if (code) {
-        const link = document.createElement("a");
-        link.className = "dtc-link";
-        link.textContent = "look up ↗";
-        link.href = dtcSearchUrl(code);
-        link.target = "_blank";
-        link.rel = "noreferrer";
-        row.append(" ", link);
+      const dtcParts = code ? line.match(/^(\s*[•\-]?\s*)([PCBU][0-3][0-9A-F]{3})\s*[—-]?\s*(.*)$/) : null;
+      const trimmed = line.trimStart();
+      const lampType: Zone | null = trimmed.startsWith("✓") ? "ok" : trimmed.startsWith("✗") ? "warn" : null;
+
+      if (code && dtcParts) {
+        // Render the code as a colour-coded chip + the rest of the description.
+        if (dtcParts[1].trim()) row.append(document.createTextNode(dtcParts[1]));
+        const chip = document.createElement("span");
+        chip.className = "dtc-chip";
+        chip.dataset.sys = code[0];
+        chip.textContent = code;
+        row.append(chip);
+        if (dtcParts[3]) row.append(document.createTextNode(`${dtcParts[3]} `));
+        row.append(makeDtcLink(code));
+      } else if (lampType) {
+        // Readiness / status check → a dashboard-style lamp + text.
+        row.classList.add("row--lamp");
+        const lamp = document.createElement("span");
+        lamp.className = `lamp lamp--${lampType}`;
+        row.append(lamp, document.createTextNode(line.replace(/^\s*[✓✗]\s*/, "")));
+      } else {
+        row.textContent = line;
       }
       card.appendChild(row);
     }
@@ -352,9 +436,22 @@ function startLive(): void {
   if (!conn || liveTimer !== null) return;
   liveSamples = [];
   liveCards.clear();
+  heroCards.clear();
   liveHistory.clear();
+  $("live-heroes").replaceChildren();
   $("live-cards").replaceChildren();
   $("live-flags").replaceChildren();
+  // Promote a few signature parameters to big radial gauges, if this car
+  // reports them. The rest stay as compact tiles below.
+  for (const pid of HERO_PIDS) {
+    if (!monitorPids.includes(pid)) continue;
+    const wrap = document.createElement("div");
+    wrap.className = "hero";
+    const canvas = document.createElement("canvas");
+    wrap.appendChild(canvas);
+    $("live-heroes").appendChild(wrap);
+    heroCards.set(pid, { canvas, value: GAUGE_SPECS[pid]?.min ?? 0 });
+  }
   show($("btn-live-start"), false);
   show($("btn-live-stop"), true);
   show($("btn-live-export"), true);
@@ -370,7 +467,8 @@ function startLive(): void {
         try {
           const decoded = await c.client.readLivePid(pid);
           if (decoded && typeof decoded.value === "number") {
-            updateCard(decoded.pid, decoded.label, decoded.value, decoded.unit);
+            if (heroCards.has(decoded.pid)) updateHero(decoded.pid, decoded.value, decoded.unit);
+            else updateCard(decoded.pid, decoded.label, decoded.value, decoded.unit);
             boundedPush(
               liveSamples,
               { pid: decoded.pid, label: decoded.label, value: decoded.value, unit: decoded.unit, t: Date.now() },
@@ -408,36 +506,93 @@ function updateCard(pid: string, label: string, value: number, unit?: string): v
     const labelEl = document.createElement("div");
     labelEl.className = "live-label";
     labelEl.textContent = label;
-    const valueEl = document.createElement("div");
-    valueEl.className = "live-value";
+    const valueLine = document.createElement("div");
+    valueLine.className = "live-value";
+    const numEl = document.createElement("span");
+    const unitEl = document.createElement("span");
+    unitEl.className = "live-unit";
+    valueLine.append(numEl, unitEl);
     const canvas = document.createElement("canvas");
     canvas.className = "spark";
-    canvas.width = 300;
-    canvas.height = 48;
-    card.append(labelEl, valueEl, canvas);
+    card.append(labelEl, valueLine, canvas);
     $("live-cards").appendChild(card);
-    entry = { valueEl, canvas };
+    entry = { card, numEl, unitEl, canvas };
     liveCards.set(pid, entry);
   }
   const display = convertUnit(value, unit, unitSystem);
-  entry.valueEl.textContent = `${display.value}${display.unit ? ` ${display.unit}` : ""}`;
+  entry.numEl.textContent = fmtReadout(display.value);
+  entry.unitEl.textContent = display.unit ?? "";
+  const zone = zoneFor(pid, value);
+  entry.card.dataset.zone = zone ?? "";
 
   const hist = liveHistory.get(pid) ?? [];
   hist.push(value); // store raw/metric so the sparkline + trends stay consistent
   if (hist.length > SPARK_MAX) hist.shift();
   liveHistory.set(pid, hist);
-  drawSparkline(entry.canvas, hist);
+  drawSparkline(entry.canvas, hist, zoneColor(zone));
 }
 
-/** Re-display existing live cards in the current units (instant toggle feedback). */
+/** Update a hero radial gauge with a fresh reading (raw/metric value). */
+function updateHero(pid: string, value: number, unit?: string): void {
+  const hero = heroCards.get(pid);
+  if (!hero) return;
+  hero.value = value;
+  hero.unit = unit;
+  drawHeroGauge(hero, pid);
+}
+
+/** A 270° radial gauge with a redline band and a digital centre readout. */
+function drawHeroGauge(hero: HeroGauge, pid: string): void {
+  const ctx = fitCanvas(hero.canvas);
+  if (!ctx) return;
+  const { width: w, height: h } = hero.canvas.getBoundingClientRect();
+  ctx.clearRect(0, 0, w, h);
+  const spec = GAUGE_SPECS[pid] ?? { min: 0, max: 100 };
+  const cx = w / 2;
+  const cy = h * 0.54;
+  const radius = Math.min(w * 0.4, h * 0.42);
+  const START = Math.PI * 0.75;
+  const SWEEP = Math.PI * 1.5; // 270°
+  const frac = clamp((hero.value - spec.min) / (spec.max - spec.min), 0, 1);
+  const zone = zoneFor(pid, hero.value);
+  const lineW = Math.max(8, radius * 0.16);
+
+  arc(ctx, cx, cy, radius, START, START + SWEEP, COLORS.track, lineW);
+  if (spec.redline !== undefined) {
+    const rf = clamp((spec.redline - spec.min) / (spec.max - spec.min), 0, 1);
+    arc(ctx, cx, cy, radius, START + rf * SWEEP, START + SWEEP, COLORS.redline, lineW);
+  }
+  ctx.shadowColor = zoneColor(zone);
+  ctx.shadowBlur = 12;
+  arc(ctx, cx, cy, radius, START, START + frac * SWEEP, zoneColor(zone), lineW);
+  ctx.shadowBlur = 0;
+
+  const display = convertUnit(hero.value, hero.unit, unitSystem);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = COLORS.text;
+  ctx.font = `600 ${Math.round(radius * 0.52)}px ${MONO}`;
+  ctx.fillText(fmtReadout(display.value), cx, cy);
+  ctx.fillStyle = COLORS.muted;
+  if (display.unit) {
+    ctx.font = `600 ${Math.round(radius * 0.2)}px ${COND}`;
+    ctx.fillText(display.unit.toUpperCase(), cx, cy + radius * 0.34);
+  }
+  ctx.font = `700 ${Math.round(radius * 0.2)}px ${COND}`;
+  ctx.fillText((HERO_LABEL[pid] ?? pid).toUpperCase(), cx, h - radius * 0.1);
+}
+
+/** Re-display existing live cards + gauges in the current units (instant toggle). */
 function relabelCards(): void {
   for (const [pid, entry] of liveCards) {
     const hist = liveHistory.get(pid);
     if (!hist || hist.length === 0) continue;
     const def = PID_FORMULAS[pid];
     const display = convertUnit(hist[hist.length - 1], def?.unit, unitSystem);
-    entry.valueEl.textContent = `${display.value}${display.unit ? ` ${display.unit}` : ""}`;
+    entry.numEl.textContent = fmtReadout(display.value);
+    entry.unitEl.textContent = display.unit ?? "";
   }
+  for (const [pid, hero] of heroCards) drawHeroGauge(hero, pid);
 }
 
 function setupUnits(): void {
@@ -455,28 +610,79 @@ function setupUnits(): void {
   });
 }
 
-function drawSparkline(canvas: HTMLCanvasElement, values: number[]): void {
+/** Size a canvas to its CSS box at device-pixel resolution; returns a scaled ctx. */
+function fitCanvas(canvas: HTMLCanvasElement): CanvasRenderingContext2D | null {
   const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  const w = Math.max(1, Math.round(rect.width));
+  const h = Math.max(1, Math.round(rect.height));
+  if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return ctx;
+}
+
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, n));
+}
+
+/** Stroke an arc with a given colour/width (used by the radial gauges). */
+function arc(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, a0: number, a1: number, color: string, width: number): void {
+  ctx.beginPath();
+  ctx.lineWidth = width;
+  ctx.lineCap = "round";
+  ctx.strokeStyle = color;
+  ctx.arc(cx, cy, r, a0, a1);
+  ctx.stroke();
+}
+
+/** "#rrggbb" + alpha → rgba() string, for canvas gradients. */
+function hexA(hex: string, a: number): string {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map(c => c + c).join("") : h;
+  const n = parseInt(full, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+
+function drawSparkline(canvas: HTMLCanvasElement, values: number[], color: string): void {
+  const ctx = fitCanvas(canvas);
   if (!ctx) return;
-  const w = canvas.width;
-  const h = canvas.height;
-  const pad = 4;
+  const { width: w, height: h } = canvas.getBoundingClientRect();
   ctx.clearRect(0, 0, w, h);
   if (values.length < 2) return;
+  const pad = 3;
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;
+  const xAt = (i: number): number => pad + (i / (values.length - 1)) * (w - 2 * pad);
+  const yAt = (v: number): number => h - pad - ((v - min) / range) * (h - 2 * pad);
+
+  // Gradient fill under the trace.
   ctx.beginPath();
+  ctx.moveTo(xAt(0), h);
+  values.forEach((v, i) => ctx.lineTo(xAt(i), yAt(v)));
+  ctx.lineTo(xAt(values.length - 1), h);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, hexA(color, 0.26));
+  grad.addColorStop(1, hexA(color, 0));
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Trace with a soft glow.
+  ctx.beginPath();
+  values.forEach((v, i) => (i === 0 ? ctx.moveTo(xAt(i), yAt(v)) : ctx.lineTo(xAt(i), yAt(v))));
   ctx.lineWidth = 2;
-  ctx.strokeStyle = "#2f81f7";
   ctx.lineJoin = "round";
-  values.forEach((v, i) => {
-    const x = pad + (i / (values.length - 1)) * (w - 2 * pad);
-    const y = h - pad - ((v - min) / range) * (h - 2 * pad);
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
+  ctx.strokeStyle = color;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 6;
   ctx.stroke();
+  ctx.shadowBlur = 0;
 }
 
 function exportLiveCsv(): void {
@@ -489,42 +695,169 @@ function renderFlags(): void {
   const container = $("live-flags");
   container.replaceChildren();
   if (report.flags.length === 0) {
-    container.appendChild(infoLine("No anomalies in the sampled window."));
+    const ok = document.createElement("div");
+    ok.className = "flag flag--ok";
+    const lamp = document.createElement("span");
+    lamp.className = "lamp lamp--ok";
+    ok.append(lamp, document.createTextNode("No anomalies in the sampled window."));
+    container.appendChild(ok);
     return;
   }
   for (const flag of report.flags) {
+    const sev: Zone = flag.severity === "warn" ? "warn" : "watch";
     const row = document.createElement("div");
-    row.className = `row row--${flag.severity === "warn" ? "warn" : "watch"}`;
-    row.textContent = `[${flag.severity}] ${flag.parameter}: ${flag.message}`;
+    row.className = `flag flag--${sev}`;
+    const lamp = document.createElement("span");
+    lamp.className = `lamp lamp--${sev}`;
+    row.append(lamp, document.createTextNode(`${flag.parameter}: ${flag.message}`));
     container.appendChild(row);
   }
 }
 
 // ---- tune advisor -----------------------------------------------------------
+// Human-readable labels + units for the assessment `details` keys, so the UI
+// never shows raw object keys like "requiredCcMin".
+const TUNE_LABELS: Record<string, string> = {
+  currentRpm: "Current cruise RPM",
+  newRpm: "New cruise RPM",
+  deltaPct: "Change",
+  requiredCcMin: "Required injector",
+  proposedCcMin: "Proposed injector",
+  headroomPct: "Headroom",
+  perInjectorLbHr: "Fuel per injector",
+  totalLbHr: "Total fuel",
+  addedAmps: "Added draw",
+  totalAmps: "Total draw",
+  utilizationPct: "Alternator load"
+};
+const TUNE_UNITS: Record<string, string> = {
+  currentRpm: "rpm",
+  newRpm: "rpm",
+  deltaPct: "%",
+  requiredCcMin: "cc/min",
+  proposedCcMin: "cc/min",
+  headroomPct: "%",
+  perInjectorLbHr: "lb/hr",
+  totalLbHr: "lb/hr",
+  addedAmps: "A",
+  totalAmps: "A",
+  utilizationPct: "%"
+};
+
+function tuneLabel(key: string): string {
+  return TUNE_LABELS[key] ?? key.replace(/([A-Z])/g, " $1").replace(/^./, c => c.toUpperCase());
+}
+function tuneValue(key: string, value: number | string): string {
+  const signed = (key === "deltaPct" || key === "headroomPct") && typeof value === "number" && value > 0 ? `+${value}` : String(value);
+  const unit = TUNE_UNITS[key];
+  return unit ? `${signed} ${unit}` : signed;
+}
+const numOf = (v: number | string): number => (typeof v === "number" ? v : Number(v));
+
 function renderAssessment(targetId: string, run: () => Assessment): void {
   const target = $(targetId);
   try {
     const a = run();
     target.replaceChildren();
+
     const verdict = document.createElement("div");
-    verdict.className = a.ok ? "row row--ok" : "row row--warn";
-    verdict.textContent = `${a.ok ? "✓" : "✗"} ${a.summary}`;
+    verdict.className = `verdict verdict--${a.ok ? "ok" : "warn"}`;
+    verdict.textContent = a.ok ? "✓ Within limits" : "✗ Check this";
     target.appendChild(verdict);
+
+    const summary = document.createElement("div");
+    summary.className = "verdict-summary";
+    summary.textContent = a.summary;
+    target.appendChild(summary);
+
+    const bar = buildTuneBar(a.details);
+    if (bar) target.appendChild(bar);
+
+    const metrics = document.createElement("div");
+    metrics.className = "metrics";
     for (const [k, val] of Object.entries(a.details)) {
-      const d = document.createElement("div");
-      d.className = "row";
-      d.textContent = `${k}: ${val}`;
-      target.appendChild(d);
+      const row = document.createElement("div");
+      row.className = "metric";
+      const key = document.createElement("span");
+      key.className = "metric-key";
+      key.textContent = tuneLabel(k);
+      const value = document.createElement("span");
+      value.className = "metric-val";
+      value.textContent = tuneValue(k, val);
+      row.append(key, value);
+      metrics.appendChild(row);
     }
-    for (const note of a.notes) {
-      const d = document.createElement("div");
-      d.className = "muted";
-      d.textContent = `• ${note}`;
-      target.appendChild(d);
+    target.appendChild(metrics);
+
+    if (a.notes.length > 0) {
+      const notes = document.createElement("ul");
+      notes.className = "tune-notes";
+      for (const note of a.notes) {
+        const li = document.createElement("li");
+        li.textContent = note;
+        notes.appendChild(li);
+      }
+      target.appendChild(notes);
     }
   } catch (err) {
     target.replaceChildren(errorLine(errMsg(err)));
   }
+}
+
+/** A labelled horizontal bar. `fill`/`marks` are 0..1 fractions of the track. */
+function makeBar(left: string, right: string, fill: number, zone: Zone, marks: Array<{ at: number; label: string }> = []): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "bar-wrap";
+  const cap = document.createElement("div");
+  cap.className = "bar-caption";
+  const l = document.createElement("span");
+  l.textContent = left;
+  const r = document.createElement("span");
+  r.textContent = right;
+  cap.append(l, r);
+  wrap.appendChild(cap);
+  const bar = document.createElement("div");
+  bar.className = "bar";
+  const fillEl = document.createElement("div");
+  fillEl.className = `bar-fill${zone !== "ok" ? ` bar-fill--${zone}` : ""}`;
+  fillEl.style.width = `${clamp(fill, 0, 1) * 100}%`;
+  bar.appendChild(fillEl);
+  for (const m of marks) {
+    const mk = document.createElement("div");
+    mk.className = "bar-mark";
+    mk.style.left = `${clamp(m.at, 0, 1) * 100}%`;
+    mk.dataset.label = m.label;
+    bar.appendChild(mk);
+  }
+  wrap.appendChild(bar);
+  return wrap;
+}
+
+/** Pick a signature visual for whichever assessment this is. */
+function buildTuneBar(d: Record<string, number | string>): HTMLElement | null {
+  if ("utilizationPct" in d) {
+    const util = numOf(d.utilizationPct);
+    const zone: Zone = util >= 100 ? "warn" : util >= 80 ? "watch" : "ok";
+    return makeBar("Alternator load", `${util}%`, util / 100, zone, [
+      { at: 0.8, label: "80%" },
+      { at: 1, label: "100%" }
+    ]);
+  }
+  if ("newRpm" in d && "currentRpm" in d && "deltaPct" in d) {
+    const cur = numOf(d.currentRpm);
+    const nw = numOf(d.newRpm);
+    const scale = Math.max(cur, nw) * 1.2 || 1;
+    const zone: Zone = Math.abs(numOf(d.deltaPct)) >= 10 ? "watch" : "ok";
+    return makeBar("Cruise RPM", `${nw} rpm`, nw / scale, zone, [{ at: cur / scale, label: "now" }]);
+  }
+  if ("proposedCcMin" in d && "requiredCcMin" in d) {
+    const req = numOf(d.requiredCcMin);
+    const prop = numOf(d.proposedCcMin);
+    const frac = prop > 0 ? req / prop : 1;
+    const zone: Zone = frac > 1 ? "warn" : frac > 0.9 ? "watch" : "ok";
+    return makeBar("Injector demand at target", `${Math.round(frac * 100)}% of injector`, frac, zone, [{ at: 1, label: "max" }]);
+  }
+  return null;
 }
 
 function setupTune(): void {
@@ -617,6 +950,8 @@ function historyItem(record: HistoryRecord, index: number): HTMLElement {
   sub.className = "history-sub";
   sub.textContent = `${mil} · ${snap.reportedDtcCount} DTC${snap.reportedDtcCount === 1 ? "" : "s"} · ${codes}${snap.vin ? ` · ${snap.vin}` : ""}`;
   btn.append(top, sub);
+  // Red timeline dot when this scan had the MIL on or stored codes; green if clean.
+  if (snap.milOn || snap.storedDtcs.length > 0) btn.classList.add("is-alert");
   btn.addEventListener("click", () => {
     for (const el of document.querySelectorAll(".history-item")) el.classList.remove("history-item--active");
     btn.classList.add("history-item--active");
@@ -659,6 +994,33 @@ function errorLine(text: string): HTMLElement {
 }
 function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** A "look up ↗" link for a DTC code, opened in the OS browser. */
+function makeDtcLink(code: string): HTMLAnchorElement {
+  const link = document.createElement("a");
+  link.className = "dtc-link";
+  link.textContent = "look up ↗";
+  link.href = dtcSearchUrl(code);
+  link.target = "_blank";
+  link.rel = "noreferrer";
+  return link;
+}
+
+/** The check-engine glyph shown in a report banner when the MIL is on. */
+function milLampSvg(): SVGElement {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("class", "mil-lamp");
+  svg.setAttribute("fill", "currentColor");
+  const path = document.createElementNS(NS, "path");
+  path.setAttribute(
+    "d",
+    "M16 5V3h-2v2h-2.6l-1.7-1.7-.7.7L10.3 5H8a2 2 0 0 0-2 2v1H4v3h2v1a3 3 0 0 0 3 3h.5l-1 4h2l1-4h1l1 4h2l-1-4h.5a3 3 0 0 0 3-3v-1h2V8h-2V7a2 2 0 0 0-2-2z"
+  );
+  svg.appendChild(path);
+  return svg;
 }
 
 // ---- boot -------------------------------------------------------------------
