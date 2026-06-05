@@ -8,7 +8,7 @@
  * nothing to rebuild against Electron's ABI.
  */
 
-import { app, BrowserWindow, ipcMain, Menu, session, type IpcMainEvent, type MenuItemConstructorOptions } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, session, shell, type IpcMainEvent, type MenuItemConstructorOptions } from "electron";
 import { join } from "node:path";
 import { IPC, type AppInfo, type SerialPortInfo } from "../shared/ipc.js";
 
@@ -32,6 +32,12 @@ function createWindow(): BrowserWindow {
       nodeIntegration: false,
       sandbox: true
     }
+  });
+
+  // Open external links (e.g. DTC look-ups) in the OS browser, never in-app.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith("https://")) void shell.openExternal(url);
+    return { action: "deny" };
   });
 
   const ses = win.webContents.session;

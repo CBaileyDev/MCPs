@@ -213,6 +213,14 @@ h3 {
   display: flex;
   gap: 10px;
 }
+.dtc-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 12px;
+}
+.dtc-link:hover {
+  text-decoration: underline;
+}
 
 /* Live monitor */
 .cards {

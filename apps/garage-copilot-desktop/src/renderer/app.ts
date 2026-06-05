@@ -21,6 +21,7 @@ import {
   type TimedSample
 } from "./core.js";
 import { WebSerialTransport } from "./web-serial.js";
+import { toCsv, lineSeverityClass, dtcSearchUrl, dtcCodeInLine } from "./format.js";
 import type { SerialPortInfo } from "../shared/ipc.js";
 
 // ---- tiny DOM helpers -------------------------------------------------------
@@ -203,8 +204,18 @@ function renderReport(
     card.appendChild(h);
     for (const line of section.lines) {
       const row = document.createElement("div");
-      row.className = lineClass(line);
+      row.className = lineSeverityClass(line);
       row.textContent = line;
+      const code = dtcCodeInLine(line);
+      if (code) {
+        const link = document.createElement("a");
+        link.className = "dtc-link";
+        link.textContent = "look up ↗";
+        link.href = dtcSearchUrl(code);
+        link.target = "_blank";
+        link.rel = "noreferrer";
+        row.append(" ", link);
+      }
       card.appendChild(row);
     }
     out.appendChild(card);
@@ -246,12 +257,6 @@ function renderReport(
 
   actions.append(copy, save);
   out.appendChild(actions);
-}
-
-function lineClass(line: string): string {
-  if (line.startsWith("✗") || /not-ready|ON\b/.test(line)) return "row row--warn";
-  if (line.startsWith("✓")) return "row row--ok";
-  return "row";
 }
 
 // ---- live monitor -----------------------------------------------------------
@@ -346,12 +351,7 @@ function drawSparkline(canvas: HTMLCanvasElement, values: number[]): void {
 
 function exportLiveCsv(): void {
   if (liveSamples.length === 0) return;
-  const header = "time_iso,pid,label,value,unit";
-  const rows = liveSamples.map(
-    s => `${new Date(s.t).toISOString()},${s.pid},"${s.label}",${s.value},${s.unit ?? ""}`
-  );
-  const csv = [header, ...rows].join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
+  const blob = new Blob([toCsv(liveSamples)], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
