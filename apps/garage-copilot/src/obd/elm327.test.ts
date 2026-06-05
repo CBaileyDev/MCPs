@@ -90,6 +90,26 @@ describe("Elm327Client robustness", () => {
     expect(entry!.lines.join(" ")).toContain("41 0C");
   });
 
+  it("parses packed (spaces-off / ATS0) PID responses", async () => {
+    const transport = new ReplayTransport({ "010C": "410C0CB0" });
+    const client = new Elm327Client(transport);
+    expect((await client.readLivePid("0C"))?.value).toBe(812);
+  });
+
+  it("ignores SEARCHING.../status noise lines before the data", async () => {
+    const transport = new ReplayTransport({ "0101": "SEARCHING...\r41 01 82 07 21 01" });
+    const client = new Elm327Client(transport);
+    const status = await client.readMonitorStatus();
+    expect(status.milOn).toBe(true);
+    expect(status.dtcCount).toBe(2);
+  });
+
+  it("returns undefined (not a crash) for an unsupported PID", async () => {
+    const transport = new ReplayTransport({ "0110": "NO DATA" });
+    const client = new Elm327Client(transport);
+    expect(await client.readLivePid("10")).toBeUndefined();
+  });
+
   it("times out when the prompt never arrives", async () => {
     const silent: ObdTransport = {
       description: "silent",
