@@ -79,6 +79,15 @@ app
     await sleep(400);
     await capture(win, "tune.png");
 
+    // VIN checker — the scan auto-filled the car's VIN; show the offline decode.
+    await win.webContents.executeJavaScript(
+      `document.querySelector('[data-tab="vin"]').click(); document.getElementById('btn-vin-check').click();`
+    );
+    await sleep(300);
+    await win.webContents.capturePage();
+    await sleep(200);
+    await capture(win, "vin.png");
+
     // History — the scan auto-saved; show the saved-scan list + detail.
     await win.webContents.executeJavaScript(`document.querySelector('[data-tab="history"]').click();`);
     await sleep(900);

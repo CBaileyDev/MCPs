@@ -18,10 +18,12 @@ import {
   assessAddedElectricalLoad,
   PID_FORMULAS,
   convertUnit,
+  decodeVin,
   type ObdReader,
   type Assessment,
   type TimedSample,
   type UnitSystem,
+  type VinDecode,
   type DiagnosticSnapshot
 } from "./core.js";
 import { WebSerialTransport } from "./web-serial.js";
@@ -307,6 +309,11 @@ async function runScan(): Promise<void> {
     lastSnapshot = await runDiagnosticSession(c.client);
     lastLabel = c.demo ? "Demo vehicle" : undefined;
     renderCurrentReport();
+    // Auto-fill the VIN Checker with the car's VIN so it's ready to validate/decode.
+    if (lastSnapshot.vin) {
+      $<HTMLInputElement>("vin-input").value = lastSnapshot.vin;
+      renderVinDecode(decodeVin(lastSnapshot.vin));
+    }
     // Auto-save the scan so the History tab builds up over time (Electron only).
     void window.garage?.history.save({ savedAt: Date.now(), label: lastLabel, snapshot: lastSnapshot });
   } catch (err) {
@@ -894,6 +901,136 @@ function setupTune(): void {
   );
 }
 
+// ---- VIN checker ------------------------------------------------------------
+function setupVin(): void {
+  const input = $<HTMLInputElement>("vin-input");
+  $("btn-vin-check").addEventListener("click", () => checkVin());
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") checkVin();
+  });
+  $("btn-vin-online").addEventListener("click", () => {
+    const decoded = decodeVin(input.value);
+    renderVinDecode(decoded);
+    // Don't spend a request on a VIN that fails the offline format check.
+    if (decoded.validation.format.ok) void vinOnlineLookup(decoded.vin, decoded.modelYear);
+  });
+}
+
+function checkVin(): void {
+  const vin = $<HTMLInputElement>("vin-input").value.trim();
+  $("vin-online").replaceChildren();
+  if (vin === "") {
+    $("vin-result").replaceChildren(infoLine("Enter a VIN to check."));
+    return;
+  }
+  renderVinDecode(decodeVin(vin));
+}
+
+/** Render the offline validation + structural decode of a VIN. */
+function renderVinDecode(d: VinDecode): void {
+  const out = $("vin-result");
+  out.replaceChildren();
+  const fmtOk = d.validation.format.ok;
+  const cd = d.validation.checkDigit;
+
+  const banner = document.createElement("div");
+  banner.className = "report-headline " + (!fmtOk ? "is-warn" : cd.matches ? "is-ok" : "");
+  const lamp = document.createElement("span");
+  lamp.className = "lamp " + (!fmtOk ? "lamp--warn" : cd.matches ? "lamp--ok" : "lamp--watch");
+  const txt = document.createElement("span");
+  txt.textContent = d.validation.assessment;
+  banner.append(lamp, txt);
+  out.appendChild(banner);
+
+  if (!fmtOk) return; // nothing structural to show on a malformed VIN
+
+  const rows: Array<[string, string | undefined]> = [
+    ["VIN", d.vin],
+    ["Country of origin", d.country],
+    ["Region", d.region],
+    ["Model year", d.modelYear ? String(d.modelYear) : undefined],
+    ["WMI (manufacturer)", d.wmi],
+    ["Plant code", d.plantCode],
+    ["Serial", d.serial],
+    ["Check digit", cd.evaluated ? `${cd.found} (expected ${cd.expected})` : undefined]
+  ];
+  out.appendChild(metricsCard(rows));
+}
+
+/** Look up the full make/model/engine online via NHTSA vPIC (the one network call). */
+async function vinOnlineLookup(vin: string, modelYear?: number): Promise<void> {
+  const out = $("vin-online");
+  out.replaceChildren(infoLine("Looking up the VIN with NHTSA vPIC…"));
+  try {
+    const yr = modelYear ? `&modelyear=${modelYear}` : "";
+    const url = `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json${yr}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = (await res.json()) as { Results?: Array<Record<string, string>> };
+    const row = json.Results?.[0];
+    if (!row) throw new Error("no result returned");
+    renderVinOnline(out, row);
+  } catch (err) {
+    out.replaceChildren(errorLine(`Online lookup unavailable: ${errMsg(err)}. The offline decode above still applies.`));
+  }
+}
+
+function renderVinOnline(out: HTMLElement, row: Record<string, string>): void {
+  out.replaceChildren();
+  const head = document.createElement("div");
+  head.className = "report-headline is-ok";
+  const lamp = document.createElement("span");
+  lamp.className = "lamp lamp--ok";
+  const txt = document.createElement("span");
+  txt.textContent = "NHTSA vPIC decode";
+  head.append(lamp, txt);
+  out.appendChild(head);
+
+  const plant = [row.PlantCity, row.PlantState, row.PlantCountry].filter(v => v && v.trim()).join(", ");
+  const rows: Array<[string, string | undefined]> = [
+    ["Make", row.Make],
+    ["Model", row.Model],
+    ["Model year", row.ModelYear],
+    ["Trim", row.Trim],
+    ["Body class", row.BodyClass],
+    ["Vehicle type", row.VehicleType],
+    ["Cylinders", row.EngineCylinders],
+    ["Displacement (L)", row.DisplacementL],
+    ["Fuel", row.FuelTypePrimary],
+    ["Drive", row.DriveType],
+    ["Manufacturer", row.Manufacturer],
+    ["Plant", plant || undefined]
+  ];
+  out.appendChild(metricsCard(rows));
+
+  if (row.ErrorCode && row.ErrorCode !== "0" && row.ErrorText) {
+    out.appendChild(infoLine(`vPIC note: ${row.ErrorText}`));
+  }
+}
+
+/** Build a card of label/value metric rows, skipping blank values. */
+function metricsCard(rows: Array<[string, string | undefined]>): HTMLElement {
+  const card = document.createElement("div");
+  card.className = "card";
+  const grid = document.createElement("div");
+  grid.className = "metrics";
+  for (const [key, value] of rows) {
+    if (!value || value.trim() === "") continue;
+    const row = document.createElement("div");
+    row.className = "metric";
+    const k = document.createElement("span");
+    k.className = "metric-key";
+    k.textContent = key;
+    const v = document.createElement("span");
+    v.className = "metric-val";
+    v.textContent = value;
+    row.append(k, v);
+    grid.appendChild(row);
+  }
+  card.appendChild(grid);
+  return card;
+}
+
 // ---- tabs / misc ------------------------------------------------------------
 function setupTabs(): void {
   const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>(".tab"));
@@ -1030,6 +1167,7 @@ function main(): void {
   setupUnits();
   setupHistory();
   setupTune();
+  setupVin();
   void setupAbout();
   $("btn-connect").addEventListener("click", () => void connectSerial());
   $("btn-demo").addEventListener("click", () => void connectDemo());

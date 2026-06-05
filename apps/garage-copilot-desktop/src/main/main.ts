@@ -16,9 +16,9 @@ import { isAllowedExternalUrl, isTrustedFrameUrl } from "./url-allowlist.js";
 
 /**
  * Content Security Policy applied as a response header (defense in depth beyond
- * the <meta> in index.html). The renderer loads only its own bundle and makes no
- * network requests, so everything is locked to 'self' and outbound connections
- * are blocked. 'unsafe-inline' is kept for styles only, which the UI relies on.
+ * the <meta> in index.html). The renderer loads only its own bundle; the single
+ * outbound exception is the opt-in VIN lookup, which contacts NHTSA's public
+ * vPIC API. 'unsafe-inline' is kept for styles only, which the UI relies on.
  */
 const CSP =
   "default-src 'self'; " +
@@ -26,7 +26,7 @@ const CSP =
   "style-src 'self' 'unsafe-inline'; " +
   "img-src 'self' data:; " +
   "font-src 'self'; " +
-  "connect-src 'none'; " +
+  "connect-src https://vpic.nhtsa.dot.gov; " +
   "object-src 'none'; " +
   "base-uri 'self'; " +
   "form-action 'none'";

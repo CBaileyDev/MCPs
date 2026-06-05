@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none';"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src https://vpic.nhtsa.dot.gov; object-src 'none'; base-uri 'self'; form-action 'none';"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Garage Copilot</title>
@@ -44,6 +44,7 @@
         <button class="tab tab--active" data-tab="diagnose">Diagnose</button>
         <button class="tab" data-tab="live">Live Monitor</button>
         <button class="tab" data-tab="tune">Tune Advisor</button>
+        <button class="tab" data-tab="vin">VIN</button>
         <button class="tab" data-tab="history">History</button>
         <button class="tab" data-tab="about">About</button>
       </nav>
@@ -109,6 +110,26 @@
               <div id="result-load" class="result"></div>
             </div>
           </div>
+        </section>
+
+        <!-- VIN Checker -->
+        <section id="tab-vin" class="panel" hidden>
+          <div class="panel-head">
+            <h2>VIN Checker <span class="muted">— validate &amp; decode a Vehicle Identification Number</span></h2>
+          </div>
+          <div class="vin-bar">
+            <input id="vin-input" class="vin-input" maxlength="17" autocomplete="off" spellcheck="false"
+                   placeholder="Enter a 17-character VIN (a scan auto-fills the car's VIN)" />
+            <button id="btn-vin-check" class="primary">Check</button>
+            <button id="btn-vin-online" class="ghost">Look up online (NHTSA)</button>
+          </div>
+          <p class="muted vin-hint">
+            Validation and structural decode (country, model year, plant) run entirely offline. The online
+            lookup is the only feature that uses the network — it queries NHTSA's free public vPIC API for
+            the full make/model/engine.
+          </p>
+          <div id="vin-result" class="output"></div>
+          <div id="vin-online" class="output"></div>
         </section>
 
         <!-- History -->
