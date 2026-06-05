@@ -69,3 +69,27 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
+
+  # The desktop GUI (Electron). It reuses the garage-copilot engine, so we build
+  # that first, then typecheck/build/test the app. Tests are hermetic (the Web
+  # Serial transport is driven through in-memory web streams); the Electron boot
+  # smoke test is run locally, not in CI.
+  desktop:
+    name: garage-copilot-desktop
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/garage-copilot-desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/garage-copilot-desktop/package-lock.json
+      - name: Build the engine it depends on
+        run: npm --prefix ../garage-copilot ci && npm --prefix ../garage-copilot run build
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build:app
+      - run: npm test

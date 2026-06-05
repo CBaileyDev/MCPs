@@ -271,6 +271,11 @@ h3 {
   justify-content: center;
   z-index: 20;
 }
+/* The class sets display:flex, which would otherwise override the [hidden]
+   attribute — make hidden win so the picker stays closed until needed. */
+.modal[hidden] {
+  display: none;
+}
 .modal-card {
   background: var(--panel);
   border: 1px solid var(--border);

@@ -36,7 +36,8 @@ together.
 
 | App | Purpose |
 | --- | --- |
-| [Garage Copilot](./apps/garage-copilot) | Connects the servers to a real car. A live ELM327 OBD-II driver plus **diagnose / monitor / tune-advise** engines, and the Claude wiring (combined MCP config + diagnostic playbook) that orchestrates every server in this repo. Read-only by design; runs fully offline via a replay adapter (no hardware or API key needed to try it). |
+| [Garage Copilot](./apps/garage-copilot) | The engine + CLI. A live ELM327 OBD-II driver plus **diagnose / monitor / tune-advise** logic, and the Claude wiring (combined MCP config + diagnostic playbook) that orchestrates every server in this repo. Read-only; runs fully offline via a replay adapter (no hardware or API key needed to try it). |
+| [Garage Copilot Desktop](./apps/garage-copilot-desktop) | The **GUI**. A macOS (and Windows/Linux) Electron desktop app that plugs into the car's OBD-II port via Web Serial and presents diagnose / live-monitor / tune-advise screens. Reuses the engine above; includes a built-in Demo mode so it runs with no hardware. |
 
 ## Repository Layout
 
@@ -60,7 +61,8 @@ servers/
   engine-build-math/
   towing-payload-math/
 apps/
-  garage-copilot/
+  garage-copilot/          # engine + CLI
+  garage-copilot-desktop/  # macOS GUI (Electron)
 docs/
   roadmaps/
   superpowers/
