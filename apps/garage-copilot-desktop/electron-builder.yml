@@ -11,6 +11,8 @@ files:
   - dist/**/*
   - package.json
 asar: true
+# Harden the packaged Electron binary (disables RunAsNode / inspector, etc.).
+afterPack: ./build-scripts/configure-fuses.cjs
 mac:
   category: public.app-category.utilities
   icon: build/icon.png

@@ -47,6 +47,20 @@ export type TrendReport = {
 const TREND_CAVEAT =
   "Trends are evidence from the supplied samples only. Confirm against service data and a known-good baseline before acting.";
 
+/** SAE J1979 Mode 01 PIDs referenced by the heuristics below. */
+const PID = {
+  SHORT_TERM_FUEL_TRIM_B1: "06",
+  LONG_TERM_FUEL_TRIM_B1: "07",
+  COOLANT_TEMP: "05",
+  CONTROL_MODULE_VOLTAGE: "42"
+} as const;
+
+/** Heuristic thresholds. Conservative and documented; tune in one place. */
+const FUEL_TRIM_WATCH_PCT = 10; // combined STFT+LTFT magnitude → "watch"
+const FUEL_TRIM_WARN_PCT = 25; // combined STFT+LTFT magnitude → "warn"
+const COOLANT_OVERHEAT_C = 110; // sustained peak above this → possible overheat
+const CHARGING_MIN_V = 13.0; // average below this with engine running → weak charge
+
 const round = (n: number): number => Math.round(n * 100) / 100;
 
 /** Group samples by PID and compute per-series statistics. */
@@ -116,18 +130,18 @@ export function analyzeTrends(samples: TimedSample[]): TrendReport {
   const flags: TrendFlag[] = [];
 
   // Fuel trim (bank 1): combine STFT (06) + LTFT (07).
-  const stft = recentAvg(byPid.get("06"));
-  const ltft = recentAvg(byPid.get("07"));
+  const stft = recentAvg(byPid.get(PID.SHORT_TERM_FUEL_TRIM_B1));
+  const ltft = recentAvg(byPid.get(PID.LONG_TERM_FUEL_TRIM_B1));
   if (stft !== undefined && ltft !== undefined) {
     const total = round(stft + ltft);
     const dir = total > 0 ? "lean (ECU adding fuel)" : "rich (ECU removing fuel)";
-    if (Math.abs(total) >= 25) {
+    if (Math.abs(total) >= FUEL_TRIM_WARN_PCT) {
       flags.push({
         severity: "warn",
         parameter: "Fuel trim (bank 1)",
         message: `Combined trim ${total > 0 ? "+" : ""}${total}% — strongly ${dir}. Investigate vacuum leaks, MAF, fuel delivery, or O2 sensors.`
       });
-    } else if (Math.abs(total) >= 10) {
+    } else if (Math.abs(total) >= FUEL_TRIM_WATCH_PCT) {
       flags.push({
         severity: "watch",
         parameter: "Fuel trim (bank 1)",
@@ -137,8 +151,8 @@ export function analyzeTrends(samples: TimedSample[]): TrendReport {
   }
 
   // Coolant overheat (05).
-  const coolant = byPid.get("05");
-  if (coolant && coolant.max >= 110) {
+  const coolant = byPid.get(PID.COOLANT_TEMP);
+  if (coolant && coolant.max >= COOLANT_OVERHEAT_C) {
     flags.push({
       severity: "warn",
       parameter: "Coolant temperature",
@@ -147,8 +161,8 @@ export function analyzeTrends(samples: TimedSample[]): TrendReport {
   }
 
   // Charging voltage (42).
-  const volt = byPid.get("42");
-  if (volt && volt.avg < 13.0) {
+  const volt = byPid.get(PID.CONTROL_MODULE_VOLTAGE);
+  if (volt && volt.avg < CHARGING_MIN_V) {
     flags.push({
       severity: "watch",
       parameter: "Charging voltage",

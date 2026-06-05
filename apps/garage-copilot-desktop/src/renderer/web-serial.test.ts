@@ -78,6 +78,45 @@ describe("WebSerialTransport", () => {
     await c2.close();
   });
 
+  it("reports an unexpected read failure via onError (e.g. USB unplug)", async () => {
+    let ctrl!: ReadableStreamDefaultController<Uint8Array>;
+    const port: SerialPortLike = {
+      readable: null,
+      writable: null,
+      async open() {
+        port.readable = new ReadableStream<Uint8Array>({
+          start(c) {
+            ctrl = c;
+          }
+        });
+        port.writable = new WritableStream<Uint8Array>({ write() {} });
+      },
+      async close() {
+        port.readable = null;
+        port.writable = null;
+      }
+    };
+    const errors: Error[] = [];
+    const transport = new WebSerialTransport(port, { onError: e => errors.push(e) });
+    await transport.start();
+
+    // Simulate the dongle vanishing: the pending read() rejects.
+    ctrl.error(new Error("The device has been lost."));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0].message).toMatch(/device has been lost/i);
+  });
+
+  it("does not call onError on an intentional close", async () => {
+    const errors: Error[] = [];
+    const transport = new WebSerialTransport(fakePort(DEMO_VEHICLE), { onError: e => errors.push(e) });
+    await transport.start();
+    await transport.close();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(errors).toEqual([]);
+  });
+
   it("throws a clear error if the port exposes no streams", async () => {
     const broken: SerialPortLike = {
       open: async () => undefined,
