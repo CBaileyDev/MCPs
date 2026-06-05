@@ -1,0 +1,55 @@
+# Package the Garage Copilot desktop app for macOS, Windows, and Linux.
+#
+# Electron apps must be built on their target OS (no reliable cross-building), so
+# this fans out across native GitHub runners. It is intentionally kept out of the
+# per-PR ci.yml — packaging is slow and only needed on demand or for a release.
+#
+# Trigger it manually (Actions tab → "Run workflow") or by pushing a v* tag. Each
+# job uploads its installers as build artifacts. Builds are UNSIGNED: macOS
+# Gatekeeper and Windows SmartScreen will warn until signing/notarization is set
+# up (see electron-builder.yml).
+name: desktop-release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  package:
+    name: package (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    defaults:
+      run:
+        working-directory: apps/garage-copilot-desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/garage-copilot-desktop/package-lock.json
+      - name: Build the engine it depends on
+        run: npm --prefix ../garage-copilot ci && npm --prefix ../garage-copilot run build
+      - run: npm ci
+      - name: Package for ${{ matrix.os }}
+        run: npm run dist
+        env:
+          # Unsigned builds — don't try to auto-discover a macOS signing identity.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: garage-copilot-${{ matrix.os }}
+          if-no-files-found: error
+          path: |
+            apps/garage-copilot-desktop/release/*.dmg
+            apps/garage-copilot-desktop/release/*.zip
+            apps/garage-copilot-desktop/release/*.exe
+            apps/garage-copilot-desktop/release/*.AppImage
+            apps/garage-copilot-desktop/release/*.deb
