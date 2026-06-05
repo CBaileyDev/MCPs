@@ -43,6 +43,17 @@ const liveCards = new Map<string, HTMLElement>();
 const liveHistory = new Map<string, number[]>();
 const LIVE_PIDS = ["0C", "0D", "05", "0F", "11", "06", "07", "42"];
 const SPARK_MAX = 60;
+const adapterLog: string[] = [];
+const LOG_MAX = 240;
+
+function logTransaction(command: string, response: string[]): void {
+  adapterLog.push(`> ${command}`);
+  adapterLog.push(`< ${response.join(" | ") || "(no data)"}`);
+  while (adapterLog.length > LOG_MAX) adapterLog.shift();
+  const pre = $("adapter-log");
+  pre.textContent = adapterLog.join("\n");
+  pre.scrollTop = pre.scrollHeight;
+}
 
 // ---- status / connection ----------------------------------------------------
 function setStatus(text: string, state: "off" | "connecting" | "on"): void {
@@ -87,7 +98,8 @@ async function connectSerial(): Promise<void> {
     const baudRate = Number($<HTMLSelectElement>("baud").value) || 38400;
     const transport = new WebSerialTransport(port, { baudRate });
     await transport.start();
-    await activate(new Elm327Client(transport), "OBD-II adapter", false);
+    adapterLog.length = 0;
+    await activate(new Elm327Client(transport, { onTransaction: logTransaction }), "OBD-II adapter", false);
   } catch (err) {
     setStatus(`No adapter selected (${errMsg(err)})`, "off");
   }
@@ -108,6 +120,7 @@ async function disconnect(): Promise<void> {
     }
   }
   conn = null;
+  show($("btn-live-export"), false);
   setStatus("Disconnected", "off");
   setConnectedUi(false);
 }
@@ -251,6 +264,7 @@ function startLive(): void {
   $("live-flags").replaceChildren();
   show($("btn-live-start"), false);
   show($("btn-live-stop"), true);
+  show($("btn-live-export"), true);
   const tick = async (): Promise<void> => {
     if (!conn) return;
     for (const pid of LIVE_PIDS) {
@@ -328,6 +342,22 @@ function drawSparkline(canvas: HTMLCanvasElement, values: number[]): void {
     else ctx.lineTo(x, y);
   });
   ctx.stroke();
+}
+
+function exportLiveCsv(): void {
+  if (liveSamples.length === 0) return;
+  const header = "time_iso,pid,label,value,unit";
+  const rows = liveSamples.map(
+    s => `${new Date(s.t).toISOString()},${s.pid},"${s.label}",${s.value},${s.unit ?? ""}`
+  );
+  const csv = [header, ...rows].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "garage-copilot-live.csv";
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function renderFlags(): void {
@@ -459,6 +489,7 @@ function main(): void {
   $("btn-scan").addEventListener("click", () => void runScan());
   $("btn-live-start").addEventListener("click", () => startLive());
   $("btn-live-stop").addEventListener("click", () => stopLive());
+  $("btn-live-export").addEventListener("click", () => exportLiveCsv());
   setConnectedUi(false);
   setStatus("Disconnected", "off");
 }

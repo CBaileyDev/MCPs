@@ -34,6 +34,11 @@ export class ObdError extends Error {
 export type Elm327Options = {
   /** Per-command response timeout in milliseconds (default 5000). */
   timeoutMs?: number;
+  /**
+   * Called for every completed command with the command sent and the cleaned
+   * response lines. Useful for a live "adapter log" when bringing up hardware.
+   */
+  onTransaction?: (command: string, response: string[]) => void;
 };
 
 /** Adapter status strings that are not hex data. */
@@ -58,12 +63,14 @@ const ERROR_TOKENS = ["UNABLE TO CONNECT", "BUS INIT: ERROR", "BUS ERROR", "CAN 
 
 export class Elm327Client implements ObdReader {
   private readonly timeoutMs: number;
+  private readonly onTransaction?: (command: string, response: string[]) => void;
   /** Serializes commands: the OBD link is half-duplex, so overlapping reads
    * (e.g. live polling racing a scan) must not interleave on the wire. */
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly transport: ObdTransport, options: Elm327Options = {}) {
     this.timeoutMs = options.timeoutMs ?? 5000;
+    this.onTransaction = options.onTransaction;
   }
 
   /**
@@ -112,13 +119,16 @@ export class Elm327Client implements ObdReader {
       });
     });
 
-    return result
+    const lines = result
       .replace(/>/g, "")
       .split(/[\r\n]+/)
       .map(line => line.trim())
       .filter(line => line.length > 0)
       // Drop a leading echo of the command itself (when ATE0 has not taken effect).
       .filter((line, i) => !(i === 0 && line.replace(/\s+/g, "").toUpperCase() === command.replace(/\s+/g, "").toUpperCase()));
+
+    this.onTransaction?.(command, lines);
+    return lines;
   }
 
   async initialize(): Promise<ObdIdentity> {

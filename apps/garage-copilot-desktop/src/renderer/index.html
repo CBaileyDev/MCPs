@@ -54,6 +54,7 @@
             <div>
               <button id="btn-live-start" class="primary" disabled>Start</button>
               <button id="btn-live-stop" class="ghost" hidden>Stop</button>
+              <button id="btn-live-export" class="ghost" hidden>Export CSV</button>
             </div>
           </div>
           <div id="live-cards" class="cards"></div>
@@ -117,6 +118,13 @@
           <p id="about-info" class="muted"></p>
         </section>
       </main>
+
+      <footer class="footer">
+        <details id="log-wrap">
+          <summary>Adapter log</summary>
+          <pre id="adapter-log" class="adapter-log">Connect a real adapter to see the ELM327 command/response traffic here.</pre>
+        </details>
+      </footer>
 
       <!-- Serial picker (Electron) -->
       <div id="picker" class="modal" hidden>

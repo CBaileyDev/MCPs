@@ -78,6 +78,17 @@ describe("Elm327Client robustness", () => {
     await expect(client.readMonitorStatus()).rejects.toBeInstanceOf(ObdError);
   });
 
+  it("reports each transaction to the onTransaction hook", async () => {
+    const log: Array<{ cmd: string; lines: string[] }> = [];
+    const client = new Elm327Client(new ReplayTransport(DEMO_VEHICLE), {
+      onTransaction: (cmd, lines) => log.push({ cmd, lines })
+    });
+    await client.readLivePid("0C");
+    const entry = log.find(e => e.cmd === "010C");
+    expect(entry).toBeDefined();
+    expect(entry!.lines.join(" ")).toContain("41 0C");
+  });
+
   it("times out when the prompt never arrives", async () => {
     const silent: ObdTransport = {
       description: "silent",

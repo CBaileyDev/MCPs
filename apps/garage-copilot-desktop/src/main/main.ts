@@ -8,7 +8,7 @@
  * nothing to rebuild against Electron's ABI.
  */
 
-import { app, BrowserWindow, ipcMain, session, type IpcMainEvent } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, session, type IpcMainEvent, type MenuItemConstructorOptions } from "electron";
 import { join } from "node:path";
 import { IPC, type AppInfo, type SerialPortInfo } from "../shared/ipc.js";
 
@@ -73,7 +73,35 @@ ipcMain.handle(IPC.AppInfo, (): AppInfo => ({
   platform: process.platform
 }));
 
+/** A standard role-based menu so Cmd+Q/Copy/Paste/Reload behave natively. */
+function buildMenu(): Menu {
+  const isMac = process.platform === "darwin";
+  const template: MenuItemConstructorOptions[] = [
+    ...(isMac
+      ? ([{ role: "appMenu" }] as MenuItemConstructorOptions[])
+      : []),
+    { role: "fileMenu" },
+    { role: "editMenu" },
+    {
+      label: "View",
+      submenu: [
+        { role: "reload" },
+        { role: "toggleDevTools" },
+        { type: "separator" },
+        { role: "resetZoom" },
+        { role: "zoomIn" },
+        { role: "zoomOut" },
+        { type: "separator" },
+        { role: "togglefullscreen" }
+      ]
+    },
+    { role: "windowMenu" }
+  ];
+  return Menu.buildFromTemplate(template);
+}
+
 void app.whenReady().then(() => {
+  Menu.setApplicationMenu(buildMenu());
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
