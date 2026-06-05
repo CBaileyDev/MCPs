@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Garage Copilot Desktop — a macOS GUI that plugs into your car's OBD-II port (via Web Serial) to diagnose, monitor, and tune-advise. Built on the Garage Copilot engine; reads only.",
+  "author": "CBaileyDev",
   "main": "dist/main/main.cjs",
   "scripts": {
     "build:core": "npm --prefix ../garage-copilot run build",

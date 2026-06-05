@@ -13,6 +13,7 @@ files:
 asar: true
 mac:
   category: public.app-category.utilities
+  icon: build/icon.png
   target:
     - dmg
     - zip
