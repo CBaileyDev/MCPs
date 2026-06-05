@@ -1,6 +1,20 @@
 import { describe, it, expect } from "vitest";
-import { toCsv, lineSeverityClass, dtcSearchUrl, dtcCodeInLine } from "./format.js";
+import { toCsv, lineSeverityClass, dtcSearchUrl, dtcCodeInLine, boundedPush } from "./format.js";
 import type { TimedSample } from "./core.js";
+
+describe("boundedPush", () => {
+  it("keeps only the most recent `max` items", () => {
+    const buf: number[] = [];
+    for (let i = 0; i < 10; i++) boundedPush(buf, i, 3);
+    expect(buf).toEqual([7, 8, 9]);
+  });
+  it("does not trim below max", () => {
+    const buf: number[] = [];
+    boundedPush(buf, 1, 5);
+    boundedPush(buf, 2, 5);
+    expect(buf).toEqual([1, 2]);
+  });
+});
 
 describe("toCsv", () => {
   it("builds a header + rows and escapes quotes in labels", () => {

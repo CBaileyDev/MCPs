@@ -99,4 +99,17 @@ describe("Elm327Client robustness", () => {
     const client = new Elm327Client(silent, { timeoutMs: 20 });
     await expect(client.send("0100")).rejects.toThrow(/Timed out/);
   });
+
+  it("honors a per-call timeout override", async () => {
+    const silent: ObdTransport = {
+      description: "silent",
+      write: async () => undefined,
+      onData: () => () => undefined,
+      close: async () => undefined
+    };
+    const client = new Elm327Client(silent, { timeoutMs: 60_000 });
+    const started = Date.now();
+    await expect(client.send("0100", 20)).rejects.toThrow(/after 20ms/);
+    expect(Date.now() - started).toBeLessThan(1000); // used the override, not 60s
+  });
 });

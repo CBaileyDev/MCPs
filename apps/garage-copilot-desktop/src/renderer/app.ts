@@ -21,7 +21,7 @@ import {
   type TimedSample
 } from "./core.js";
 import { WebSerialTransport } from "./web-serial.js";
-import { toCsv, lineSeverityClass, dtcSearchUrl, dtcCodeInLine } from "./format.js";
+import { toCsv, lineSeverityClass, dtcSearchUrl, dtcCodeInLine, boundedPush } from "./format.js";
 import type { SerialPortInfo } from "../shared/ipc.js";
 
 // ---- tiny DOM helpers -------------------------------------------------------
@@ -44,6 +44,9 @@ const liveCards = new Map<string, HTMLElement>();
 const liveHistory = new Map<string, number[]>();
 const LIVE_PIDS = ["0C", "0D", "05", "0F", "11", "06", "07", "42"];
 const SPARK_MAX = 60;
+// Cap the live sample buffer (~8 min at 8 PIDs/s) so memory and per-tick trend
+// analysis stay flat over a long monitor session. CSV export covers this window.
+const LIVE_SAMPLES_MAX = 4000;
 const adapterLog: string[] = [];
 const LOG_MAX = 240;
 
@@ -100,7 +103,13 @@ async function connectSerial(): Promise<void> {
     const transport = new WebSerialTransport(port, { baudRate });
     await transport.start();
     adapterLog.length = 0;
-    await activate(new Elm327Client(transport, { onTransaction: logTransaction }), "OBD-II adapter", false);
+    // 4s per command keeps live polling responsive and fails fast on a dead
+    // adapter; initialize() still gives protocol negotiation a longer window.
+    await activate(
+      new Elm327Client(transport, { onTransaction: logTransaction, timeoutMs: 4000 }),
+      "OBD-II adapter",
+      false
+    );
   } catch (err) {
     setStatus(`No adapter selected (${errMsg(err)})`, "off");
   }
@@ -285,7 +294,11 @@ function startLive(): void {
           const decoded = await c.client.readLivePid(pid);
           if (decoded && typeof decoded.value === "number") {
             updateCard(decoded.pid, decoded.label, decoded.value, decoded.unit);
-            liveSamples.push({ pid: decoded.pid, label: decoded.label, value: decoded.value, unit: decoded.unit, t: Date.now() });
+            boundedPush(
+              liveSamples,
+              { pid: decoded.pid, label: decoded.label, value: decoded.value, unit: decoded.unit, t: Date.now() },
+              LIVE_SAMPLES_MAX
+            );
           }
         } catch {
           /* skip this PID this round */

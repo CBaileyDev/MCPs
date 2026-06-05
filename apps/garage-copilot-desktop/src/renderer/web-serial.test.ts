@@ -3,29 +3,42 @@ import { WebSerialTransport, type SerialPortLike } from "./web-serial.js";
 import { Elm327Client, DEMO_VEHICLE } from "./core.js";
 
 /**
- * A fake Web Serial port backed by in-memory Web Streams (available as Node
- * globals). On each write it looks up the scripted ELM327 response and enqueues
- * it on the readable side, terminated with the ">" prompt — exactly what a real
- * dongle does. This exercises the WebSerialTransport + the real engine driver
- * end-to-end with no hardware.
+ * A fake Web Serial port backed by in-memory Web Streams (Node globals). It
+ * mirrors real SerialPort lifecycle: open() creates fresh readable/writable
+ * streams, close() drops them — so the close→reopen (reconnect) path is
+ * exercised. On each write it enqueues the scripted ELM327 response terminated
+ * with the ">" prompt, exactly like a real dongle.
  */
 function fakePort(script: Record<string, string>): SerialPortLike {
-  let controller!: ReadableStreamDefaultController<Uint8Array>;
   const enc = new TextEncoder();
   const dec = new TextDecoder();
-  const readable = new ReadableStream<Uint8Array>({
-    start(c) {
-      controller = c;
+  const port: SerialPortLike = {
+    readable: null,
+    writable: null,
+    async open() {
+      let controller!: ReadableStreamDefaultController<Uint8Array>;
+      port.readable = new ReadableStream<Uint8Array>({
+        start(c) {
+          controller = c;
+        },
+        cancel() {
+          /* unblock pump */
+        }
+      });
+      port.writable = new WritableStream<Uint8Array>({
+        write(chunk) {
+          const cmd = dec.decode(chunk).replace(/[\r\n]+$/g, "").replace(/\s+/g, "").toUpperCase();
+          const body = cmd in script ? script[cmd] : "NO DATA";
+          queueMicrotask(() => controller.enqueue(enc.encode(`${body}\r>`)));
+        }
+      });
+    },
+    async close() {
+      port.readable = null;
+      port.writable = null;
     }
-  });
-  const writable = new WritableStream<Uint8Array>({
-    write(chunk) {
-      const cmd = dec.decode(chunk).replace(/[\r\n]+$/g, "").replace(/\s+/g, "").toUpperCase();
-      const body = cmd in script ? script[cmd] : "NO DATA";
-      queueMicrotask(() => controller.enqueue(enc.encode(`${body}\r>`)));
-    }
-  });
-  return { open: async () => undefined, close: async () => undefined, readable, writable };
+  };
+  return port;
 }
 
 describe("WebSerialTransport", () => {
@@ -46,6 +59,23 @@ describe("WebSerialTransport", () => {
     expect(await client.readVoltage()).toBe(14.2);
 
     await client.close();
+  });
+
+  it("closes cleanly and the port can be reopened (reconnect)", async () => {
+    const port = fakePort(DEMO_VEHICLE);
+
+    const t1 = new WebSerialTransport(port);
+    await t1.start();
+    const c1 = new Elm327Client(t1);
+    expect((await c1.readLivePid("0C"))?.value).toBe(812);
+    await expect(c1.close()).resolves.toBeUndefined(); // close() resolves, no hang/lock error
+
+    // Reconnect on the same port — only possible if close released both locks.
+    const t2 = new WebSerialTransport(port);
+    await t2.start();
+    const c2 = new Elm327Client(t2);
+    expect((await c2.readLivePid("05"))?.value).toBe(89);
+    await c2.close();
   });
 
   it("throws a clear error if the port exposes no streams", async () => {

@@ -33,6 +33,7 @@ export class WebSerialTransport implements ObdTransport {
   private readonly decoder = new TextDecoder();
   private writer?: WritableStreamDefaultWriter<Uint8Array>;
   private reader?: ReadableStreamDefaultReader<Uint8Array>;
+  private pumpDone?: Promise<void>;
   private closed = false;
 
   constructor(private readonly port: SerialPortLike, options: WebSerialOptions = {}) {
@@ -48,7 +49,7 @@ export class WebSerialTransport implements ObdTransport {
     }
     this.writer = this.port.writable.getWriter();
     this.reader = this.port.readable.getReader();
-    void this.pump();
+    this.pumpDone = this.pump();
   }
 
   private async pump(): Promise<void> {
@@ -67,6 +68,15 @@ export class WebSerialTransport implements ObdTransport {
       }
     } catch {
       // Reader cancelled / port closed — stop quietly.
+    } finally {
+      // Release the lock here (after the read loop has actually stopped) so
+      // close() can shut the port without a "still locked" error — which is what
+      // otherwise leaves the port unusable and makes reconnect glitch.
+      try {
+        reader.releaseLock();
+      } catch {
+        /* already released */
+      }
     }
   }
 
@@ -82,26 +92,26 @@ export class WebSerialTransport implements ObdTransport {
 
   async close(): Promise<void> {
     this.closed = true;
+    // 1. Cancel the reader — this unblocks the pump's pending read().
     try {
       await this.reader?.cancel();
     } catch {
       /* ignore */
     }
+    // 2. Wait for the pump loop to actually finish and release its reader lock.
     try {
-      this.reader?.releaseLock();
+      await this.pumpDone;
     } catch {
       /* ignore */
     }
-    try {
-      await this.writer?.close();
-    } catch {
-      /* ignore */
-    }
+    // 3. Release the writer lock (do NOT await writer.close(), which can hang if
+    //    a write is mid-flight — port.close() tears the stream down anyway).
     try {
       this.writer?.releaseLock();
     } catch {
       /* ignore */
     }
+    // 4. With both locks released, the port closes cleanly and can be reopened.
     try {
       await this.port.close();
     } catch {

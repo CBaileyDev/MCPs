@@ -21,6 +21,18 @@ export function lineSeverityClass(line: string): string {
   return "row";
 }
 
+/**
+ * Push an item onto a rolling buffer, dropping the oldest so length never
+ * exceeds `max`. Mutates and returns the array. Keeps the live-monitor sample
+ * buffer bounded so memory and per-tick trend analysis stay flat over a long
+ * session.
+ */
+export function boundedPush<T>(buffer: T[], item: T, max: number): T[] {
+  buffer.push(item);
+  if (buffer.length > max) buffer.splice(0, buffer.length - max);
+  return buffer;
+}
+
 /** A standard web search URL for a DTC code (for the "look up" affordance). */
 export function dtcSearchUrl(code: string): string {
   return `https://www.google.com/search?q=${encodeURIComponent(`OBD-II ${code} trouble code`)}`;

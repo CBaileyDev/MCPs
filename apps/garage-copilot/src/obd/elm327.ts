@@ -77,11 +77,12 @@ export class Elm327Client implements ObdReader {
    * Write a single command and collect the response up to the ELM327 ">" prompt.
    * Commands are queued so concurrent callers run one-at-a-time in call order.
    * Returns the response split into trimmed, non-empty lines with the prompt and
-   * any command echo removed. Rejects if the prompt is not seen within the
-   * configured timeout.
+   * any command echo removed. Rejects if the prompt is not seen within
+   * `timeoutMs` (defaults to the instance timeout); pass a larger value for slow
+   * operations like protocol negotiation.
    */
-  async send(command: string): Promise<string[]> {
-    const run = this.queue.then(() => this.sendNow(command));
+  async send(command: string, timeoutMs?: number): Promise<string[]> {
+    const run = this.queue.then(() => this.sendNow(command, timeoutMs));
     // Keep the chain alive even if this command rejects.
     this.queue = run.then(
       () => undefined,
@@ -90,15 +91,15 @@ export class Elm327Client implements ObdReader {
     return run;
   }
 
-  private async sendNow(command: string): Promise<string[]> {
+  private async sendNow(command: string, timeoutMs = this.timeoutMs): Promise<string[]> {
     let buffer = "";
     let unsubscribe: (() => void) | undefined;
 
     const result = await new Promise<string>((resolve, reject) => {
       const timer = setTimeout(() => {
         cleanup();
-        reject(new ObdError(`Timed out waiting for response to "${command}" after ${this.timeoutMs}ms`));
-      }, this.timeoutMs);
+        reject(new ObdError(`Timed out waiting for response to "${command}" after ${timeoutMs}ms`));
+      }, timeoutMs);
 
       const cleanup = () => {
         clearTimeout(timer);
@@ -140,8 +141,11 @@ export class Elm327Client implements ObdReader {
     await this.send("ATS0"); // spaces off
     await this.send("ATH0"); // headers off
     await this.send("ATSP0"); // automatic protocol selection
-    // A first real request forces protocol negotiation; ignore its data here.
-    await this.send("0100").catch(() => undefined);
+    // The first real request forces protocol negotiation, which can take several
+    // seconds on some vehicles ("SEARCHING..."), so give it a generous timeout.
+    // (The AT setup commands above use the instance timeout, so a dead adapter
+    // still fails fast on ATZ rather than hanging the whole init.)
+    await this.send("0100", Math.max(this.timeoutMs, 12_000)).catch(() => undefined);
     let protocol = "unknown";
     try {
       const dp = await this.send("ATDP");
