@@ -200,6 +200,10 @@ h3 {
   cursor: pointer;
   color: var(--muted);
 }
+.report-actions {
+  display: flex;
+  gap: 10px;
+}
 
 /* Live monitor */
 .cards {
@@ -223,6 +227,12 @@ h3 {
   font-size: 24px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+.spark {
+  display: block;
+  width: 100%;
+  height: 40px;
+  margin-top: 10px;
 }
 .flags {
   display: flex;

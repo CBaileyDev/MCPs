@@ -55,7 +55,7 @@ app
     await win.webContents.executeJavaScript(
       `document.querySelector('[data-tab="live"]').click(); document.getElementById('btn-live-start').click();`
     );
-    await sleep(2600);
+    await sleep(13000); // let the simulated data move so the sparklines have shape
     await capture(win, "live.png");
     await win.webContents.executeJavaScript(`document.getElementById('btn-live-stop').click();`);
 

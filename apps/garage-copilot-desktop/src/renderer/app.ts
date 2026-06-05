@@ -9,15 +9,14 @@
 
 import {
   Elm327Client,
-  ReplayTransport,
-  DEMO_VEHICLE,
+  SimulatedObdReader,
   runDiagnosticSession,
   buildReport,
   analyzeTrends,
   assessFinalDriveChange,
   assessInjectorsForTarget,
   assessAddedElectricalLoad,
-  type ObdTransport,
+  type ObdReader,
   type Assessment,
   type TimedSample
 } from "./core.js";
@@ -36,12 +35,14 @@ const show = (el: HTMLElement, visible: boolean): void => {
 };
 
 // ---- connection state -------------------------------------------------------
-type Connection = { client: Elm327Client; label: string; demo: boolean };
+type Connection = { client: ObdReader; label: string; demo: boolean };
 let conn: Connection | null = null;
 let liveTimer: number | null = null;
 let liveSamples: TimedSample[] = [];
 const liveCards = new Map<string, HTMLElement>();
+const liveHistory = new Map<string, number[]>();
 const LIVE_PIDS = ["0C", "0D", "05", "0F", "11", "06", "07", "42"];
+const SPARK_MAX = 60;
 
 // ---- status / connection ----------------------------------------------------
 function setStatus(text: string, state: "off" | "connecting" | "on"): void {
@@ -58,7 +59,7 @@ function setConnectedUi(connected: boolean): void {
   $<HTMLButtonElement>("btn-live-start").disabled = !connected;
 }
 
-async function activate(client: Elm327Client, label: string, demo: boolean): Promise<void> {
+async function activate(client: ObdReader, label: string, demo: boolean): Promise<void> {
   setStatus("Initializing…", "connecting");
   try {
     const id = await client.initialize();
@@ -92,8 +93,8 @@ async function connectSerial(): Promise<void> {
 }
 
 async function connectDemo(): Promise<void> {
-  const transport: ObdTransport = new ReplayTransport(DEMO_VEHICLE);
-  await activate(new Elm327Client(transport), "Demo (replay)", true);
+  // A simulator with time-varying idle data, so the live monitor actually moves.
+  await activate(new SimulatedObdReader(), "Demo (simulated)", true);
 }
 
 async function disconnect(): Promise<void> {
@@ -208,11 +209,29 @@ function renderReport(
   }
   out.appendChild(cav);
 
+  const actions = document.createElement("div");
+  actions.className = "report-actions";
+
   const copy = document.createElement("button");
   copy.className = "ghost";
   copy.textContent = "Copy report";
   copy.addEventListener("click", () => void navigator.clipboard?.writeText(fullText));
-  out.appendChild(copy);
+
+  const save = document.createElement("button");
+  save.className = "ghost";
+  save.textContent = "Save report (.md)";
+  save.addEventListener("click", () => {
+    const blob = new Blob([fullText], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "garage-copilot-report.md";
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  actions.append(copy, save);
+  out.appendChild(actions);
 }
 
 function lineClass(line: string): string {
@@ -226,6 +245,7 @@ function startLive(): void {
   if (!conn || liveTimer !== null) return;
   liveSamples = [];
   liveCards.clear();
+  liveHistory.clear();
   $("live-cards").replaceChildren();
   $("live-flags").replaceChildren();
   show($("btn-live-start"), false);
@@ -268,12 +288,45 @@ function updateCard(pid: string, label: string, value: number, unit?: string): v
     l.textContent = label;
     const v = document.createElement("div");
     v.className = "live-value";
-    card.append(l, v);
+    const canvas = document.createElement("canvas");
+    canvas.className = "spark";
+    canvas.width = 300;
+    canvas.height = 48;
+    card.append(l, v, canvas);
     liveCards.set(pid, card);
     $("live-cards").appendChild(card);
   }
-  const v = card.querySelector(".live-value") as HTMLElement;
-  v.textContent = `${value}${unit ? ` ${unit}` : ""}`;
+  (card.querySelector(".live-value") as HTMLElement).textContent = `${value}${unit ? ` ${unit}` : ""}`;
+
+  const hist = liveHistory.get(pid) ?? [];
+  hist.push(value);
+  if (hist.length > SPARK_MAX) hist.shift();
+  liveHistory.set(pid, hist);
+  drawSparkline(card.querySelector(".spark") as HTMLCanvasElement, hist);
+}
+
+function drawSparkline(canvas: HTMLCanvasElement, values: number[]): void {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const w = canvas.width;
+  const h = canvas.height;
+  const pad = 4;
+  ctx.clearRect(0, 0, w, h);
+  if (values.length < 2) return;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  ctx.beginPath();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "#2f81f7";
+  ctx.lineJoin = "round";
+  values.forEach((v, i) => {
+    const x = pad + (i / (values.length - 1)) * (w - 2 * pad);
+    const y = h - pad - ((v - min) / range) * (h - 2 * pad);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
 }
 
 function renderFlags(): void {

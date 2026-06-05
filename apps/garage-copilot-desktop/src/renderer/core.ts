@@ -7,6 +7,7 @@
 
 export { Elm327Client } from "../../../garage-copilot/dist/obd/elm327.js";
 export { ReplayTransport } from "../../../garage-copilot/dist/obd/replay-transport.js";
+export { SimulatedObdReader } from "../../../garage-copilot/dist/obd/simulator.js";
 export { DEMO_VEHICLE, DEMO_LIVE_PIDS } from "../../../garage-copilot/dist/obd/recordings.js";
 export { runDiagnosticSession } from "../../../garage-copilot/dist/diagnose/session.js";
 export { buildReport } from "../../../garage-copilot/dist/diagnose/report.js";

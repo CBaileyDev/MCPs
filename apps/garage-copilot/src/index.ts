@@ -13,6 +13,7 @@ export { Elm327Client, ObdError, type Elm327Options } from "./obd/elm327.js";
 export { ReplayTransport, normalizeCommand, type ReplayScript } from "./obd/replay-transport.js";
 export { openSerialTransport, type SerialOptions } from "./obd/serial-transport.js";
 export { DEMO_VEHICLE, DEMO_LIVE_PIDS } from "./obd/recordings.js";
+export { SimulatedObdReader, type SimulatorOptions } from "./obd/simulator.js";
 export {
   PID_FORMULAS,
   decodePidData,

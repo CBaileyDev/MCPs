@@ -69,7 +69,8 @@ app
         pillClass: pill.className,
         scanHasMisfire: scanText.includes('P0301'),
         scanHasCat: scanText.includes('P0420'),
-        scanHasRpm: scanText.includes('812'),
+        scanHasVin: scanText.includes('1HGBH41JXMN109186'),
+        scanHasRpm: /Engine RPM/.test(scanText),
         fdHasRpm: fdText.includes('2480') || /RPM/i.test(fdText),
         errors
       };
@@ -81,6 +82,7 @@ app
       failures.push("Demo connect did not reach connected state: " + result.pill);
     }
     if (!result.scanHasMisfire || !result.scanHasCat) failures.push("Scan output missing DTC codes");
+    if (!result.scanHasVin) failures.push("Scan output missing VIN");
     if (!result.scanHasRpm) failures.push("Scan output missing live RPM");
     if (!result.fdHasRpm) failures.push("Tune advisor produced no result");
     if (Array.isArray(result.errors) && result.errors.length) failures.push("renderer errors: " + result.errors.join("; "));
