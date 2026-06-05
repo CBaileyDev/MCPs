@@ -64,6 +64,8 @@ const ERROR_TOKENS = ["UNABLE TO CONNECT", "BUS INIT: ERROR", "BUS ERROR", "CAN 
 export class Elm327Client implements ObdReader {
   private readonly timeoutMs: number;
   private readonly onTransaction?: (command: string, response: string[]) => void;
+  /** True once init detects a CAN protocol (DTC responses carry a count byte). */
+  private canMode = false;
   /** Serializes commands: the OBD link is half-duplex, so overlapping reads
    * (e.g. live polling racing a scan) must not interleave on the wire. */
   private queue: Promise<unknown> = Promise.resolve();
@@ -153,6 +155,9 @@ export class Elm327Client implements ObdReader {
     } catch {
       // Protocol description is best-effort.
     }
+    // CAN (ISO 15765-4) DTC responses carry a leading count byte; remember so
+    // readDtcMode strips it. Legacy protocols (J1850/ISO 9141/KWP) do not.
+    this.canMode = /CAN|15765/i.test(protocol);
     return { description: description.trim(), protocol };
   }
 
@@ -203,7 +208,9 @@ export class Elm327Client implements ObdReader {
     const lines = await this.send(command);
     this.assertNoBusError(lines, command);
     if (this.isNoData(lines)) return [];
-    return decodeDtcResponse(this.hexLines(lines), service);
+    // Pass raw lines so any ISO-TP frame index is preserved for stripping; on CAN
+    // skip the leading count byte after the service byte.
+    return decodeDtcResponse(lines, service, { skipCountByte: this.canMode });
   }
 
   async readLivePid(pid: string): Promise<DecodedPid | undefined> {

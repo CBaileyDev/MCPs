@@ -32,7 +32,8 @@ export const DEMO_VEHICLE: ReplayScript = {
   "0101": "41 01 82 07 21 01",
 
   // --- DTCs --------------------------------------------------------------
-  "03": "43 03 01 04 20", // P0301, P0420
+  // CAN Mode 03: "43 <count> <dtc pairs>". 02 codes: P0301 (03 01), P0420 (04 20).
+  "03": "43 02 03 01 04 20",
   "07": "NO DATA", // no pending codes
   "0A": "NO DATA", // no permanent codes
 

@@ -43,6 +43,14 @@ describe("decodeTroubleCodes / decodeDtcResponse", () => {
     expect(decodeDtcResponse(["43 03 01 04 20"], 0x43)).toEqual(["P0301", "P0420"]);
     expect(decodeDtcResponse(["43 03 01", "43 03 01"], 0x43)).toEqual(["P0301"]);
   });
+  it("skips the CAN count byte so it does not become a phantom code", () => {
+    // Without skipCountByte the 0x02 count would mis-pair into garbage.
+    expect(decodeDtcResponse(["43 02 03 01 04 20"], 0x43)).toEqual(["P0203", "P0104"]);
+    expect(decodeDtcResponse(["43 02 03 01 04 20"], 0x43, { skipCountByte: true })).toEqual(["P0301", "P0420"]);
+  });
+  it("strips an ISO-TP frame index before decoding", () => {
+    expect(decodeDtcResponse(["0: 43 02 03 01 04 20"], 0x43, { skipCountByte: true })).toEqual(["P0301", "P0420"]);
+  });
   it("returns empty when the service byte is absent", () => {
     expect(decodeDtcResponse(["NO DATA"], 0x43)).toEqual([]);
   });

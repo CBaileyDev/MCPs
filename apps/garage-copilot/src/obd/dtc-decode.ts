@@ -63,20 +63,25 @@ export function decodeTroubleCodes(data: number[]): string[] {
  * codes. `service` is the positive-response service byte to strip (0x43 for
  * mode 03, 0x47 for 07, 0x4A for 0A).
  *
- * CAVEAT: on CAN, some ECUs prefix the DTC pairs with a one-byte count after
- * the service byte. That count is indistinguishable from a DTC high-byte in
- * isolation, so for an authoritative *count* prefer the DTC count in the
- * Mode-01 PID-01 monitor status (decodeMonitorStatus). This decoder returns the
- * decoded *codes*; callers should treat the set, not the arithmetic count, as
- * the source of truth.
+ * On CAN (ISO 15765-4) the ECU prefixes the DTC pairs with a one-byte COUNT of
+ * codes right after the service byte (`43 NN <pairs>`). That byte must be
+ * skipped or it pairs with the first code's high byte and yields garbage; set
+ * `skipCountByte` for CAN protocols. Legacy protocols (J1850/ISO 9141/KWP) have
+ * no count byte. Any ISO-TP frame index ("0:", "1:") an adapter prints for a
+ * multi-frame response is stripped per line.
  */
-export function decodeDtcResponse(lines: string[], service: number): string[] {
+export function decodeDtcResponse(
+  lines: string[],
+  service: number,
+  options: { skipCountByte?: boolean } = {}
+): string[] {
   const codes = new Set<string>();
-  for (const line of lines) {
-    const bytes = parseHexBytes(line);
+  for (const raw of lines) {
+    const bytes = parseHexBytes(raw.replace(/^[0-9A-Fa-f]+:\s*/, ""));
     const idx = bytes.indexOf(service);
     if (idx === -1) continue;
-    const payload = bytes.slice(idx + 1);
+    let payload = bytes.slice(idx + 1);
+    if (options.skipCountByte && payload.length > 0) payload = payload.slice(1);
     for (const code of decodeTroubleCodes(payload)) codes.add(code);
   }
   return [...codes];

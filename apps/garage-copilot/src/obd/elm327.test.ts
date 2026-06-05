@@ -27,8 +27,9 @@ describe("Elm327Client against the demo vehicle", () => {
     expect(status.ignitionType).toBe("spark");
   });
 
-  it("reads stored DTCs and decodes them", async () => {
+  it("reads stored DTCs and decodes them (CAN: count byte skipped)", async () => {
     const { client } = demoClient();
+    await client.initialize(); // detects CAN so the Mode-03 count byte is stripped
     expect(await client.readStoredDtcs()).toEqual(["P0301", "P0420"]);
   });
 
