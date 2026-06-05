@@ -17,6 +17,9 @@ export {
   assessInjectorsForTarget,
   assessAddedElectricalLoad
 } from "../../../garage-copilot/dist/tune/advisor.js";
+export { PID_FORMULAS } from "../../../garage-copilot/dist/obd/pid-formulas.js";
+export { convertUnit } from "../../../garage-copilot/dist/obd/units.js";
+export type { UnitSystem } from "../../../garage-copilot/dist/obd/units.js";
 
 export type { ObdTransport } from "../../../garage-copilot/dist/obd/transport.js";
 export type { ObdReader } from "../../../garage-copilot/dist/obd/reader.js";

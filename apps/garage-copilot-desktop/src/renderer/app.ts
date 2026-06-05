@@ -16,13 +16,17 @@ import {
   assessFinalDriveChange,
   assessInjectorsForTarget,
   assessAddedElectricalLoad,
+  PID_FORMULAS,
+  convertUnit,
   type ObdReader,
   type Assessment,
-  type TimedSample
+  type TimedSample,
+  type UnitSystem,
+  type DiagnosticSnapshot
 } from "./core.js";
 import { WebSerialTransport } from "./web-serial.js";
 import { toCsv, lineSeverityClass, dtcSearchUrl, dtcCodeInLine, boundedPush } from "./format.js";
-import type { SerialPortInfo } from "../shared/ipc.js";
+import type { SerialPortInfo, HistoryRecord } from "../shared/ipc.js";
 
 // ---- tiny DOM helpers -------------------------------------------------------
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
@@ -38,12 +42,20 @@ const show = (el: HTMLElement, visible: boolean): void => {
 // ---- connection state -------------------------------------------------------
 type Connection = { client: ObdReader; label: string; demo: boolean };
 let conn: Connection | null = null;
+let unitSystem: UnitSystem = "metric";
+let lastSnapshot: DiagnosticSnapshot | null = null;
+let lastLabel: string | undefined;
 let liveTimer: number | null = null;
 let liveSamples: TimedSample[] = [];
 type LiveCard = { valueEl: HTMLElement; canvas: HTMLCanvasElement };
 const liveCards = new Map<string, LiveCard>();
 const liveHistory = new Map<string, number[]>();
-const LIVE_PIDS = ["0C", "0D", "05", "0F", "11", "06", "07", "42"];
+// Fallback PIDs when capability discovery is unavailable or empty.
+const DEFAULT_LIVE_PIDS = ["0C", "0D", "05", "0F", "11", "06", "07", "42"];
+// Preferred display order (most useful first); the rest follow.
+const PID_PRIORITY = ["0C", "0D", "05", "04", "0B", "10", "0E", "11", "0F", "06", "07", "42", "2F", "46", "5C", "33"];
+const MONITOR_PID_CAP = 16;
+let monitorPids: string[] = DEFAULT_LIVE_PIDS;
 const SPARK_MAX = 60;
 // Cap the live sample buffer (~8 min at 8 PIDs/s) so memory and per-tick trend
 // analysis stay flat over a long monitor session. CSV export covers this window.
@@ -89,6 +101,9 @@ async function activate(client: ObdReader, label: string, demo: boolean): Promis
   try {
     const id = await client.initialize();
     conn = { client, label, demo };
+    // Discover which live PIDs this car actually supports so the monitor adapts
+    // to the vehicle instead of polling a fixed (often unsupported) set.
+    monitorPids = await discoverMonitorPids(client);
     setStatus(`${demo ? "Demo" : "Connected"} · ${id.description} · ${id.protocol}`, "on");
     setConnectedUi(true);
   } catch (err) {
@@ -98,6 +113,27 @@ async function activate(client: ObdReader, label: string, demo: boolean): Promis
     } catch {
       /* ignore */
     }
+  }
+}
+
+/**
+ * Ask the ECU which live PIDs it supports, keep only those we can decode, and
+ * order them for display (preferred first), capped for a tidy grid. Falls back
+ * to a sensible default if discovery is unavailable or empty.
+ */
+async function discoverMonitorPids(client: ObdReader): Promise<string[]> {
+  if (!client.readSupportedPids) return DEFAULT_LIVE_PIDS;
+  try {
+    const supported = await client.readSupportedPids();
+    const decodable = supported.filter(p => p in PID_FORMULAS);
+    if (decodable.length === 0) return DEFAULT_LIVE_PIDS;
+    const ordered = [
+      ...PID_PRIORITY.filter(p => decodable.includes(p)),
+      ...decodable.filter(p => !PID_PRIORITY.includes(p))
+    ];
+    return ordered.slice(0, MONITOR_PID_CAP);
+  } catch {
+    return DEFAULT_LIVE_PIDS;
   }
 }
 
@@ -193,14 +229,23 @@ async function runScan(): Promise<void> {
   btn.disabled = true;
   out.replaceChildren(infoLine("Scanning… reading status, codes, readiness, and live data."));
   try {
-    const snapshot = await runDiagnosticSession(c.client);
-    const report = buildReport(snapshot, c.demo ? "Demo vehicle" : undefined);
-    renderReport(out, report.headline, report.sections, report.caveats, report.text);
+    lastSnapshot = await runDiagnosticSession(c.client);
+    lastLabel = c.demo ? "Demo vehicle" : undefined;
+    renderCurrentReport();
+    // Auto-save the scan so the History tab builds up over time (Electron only).
+    void window.garage?.history.save({ savedAt: Date.now(), label: lastLabel, snapshot: lastSnapshot });
   } catch (err) {
     out.replaceChildren(errorLine(`Scan failed: ${errMsg(err)}`));
   } finally {
     btn.disabled = false;
   }
+}
+
+/** Re-render the most recent scan with the current display units. */
+function renderCurrentReport(): void {
+  if (!lastSnapshot) return;
+  const report = buildReport(lastSnapshot, lastLabel, unitSystem);
+  renderReport($("diagnose-output"), report.headline, report.sections, report.caveats, report.text);
 }
 
 function renderReport(
@@ -304,7 +349,7 @@ function startLive(): void {
     if (!c || inFlight) return;
     inFlight = true;
     try {
-      for (const pid of LIVE_PIDS) {
+      for (const pid of monitorPids) {
         try {
           const decoded = await c.client.readLivePid(pid);
           if (decoded && typeof decoded.value === "number") {
@@ -357,13 +402,40 @@ function updateCard(pid: string, label: string, value: number, unit?: string): v
     entry = { valueEl, canvas };
     liveCards.set(pid, entry);
   }
-  entry.valueEl.textContent = `${value}${unit ? ` ${unit}` : ""}`;
+  const display = convertUnit(value, unit, unitSystem);
+  entry.valueEl.textContent = `${display.value}${display.unit ? ` ${display.unit}` : ""}`;
 
   const hist = liveHistory.get(pid) ?? [];
-  hist.push(value);
+  hist.push(value); // store raw/metric so the sparkline + trends stay consistent
   if (hist.length > SPARK_MAX) hist.shift();
   liveHistory.set(pid, hist);
   drawSparkline(entry.canvas, hist);
+}
+
+/** Re-display existing live cards in the current units (instant toggle feedback). */
+function relabelCards(): void {
+  for (const [pid, entry] of liveCards) {
+    const hist = liveHistory.get(pid);
+    if (!hist || hist.length === 0) continue;
+    const def = PID_FORMULAS[pid];
+    const display = convertUnit(hist[hist.length - 1], def?.unit, unitSystem);
+    entry.valueEl.textContent = `${display.value}${display.unit ? ` ${display.unit}` : ""}`;
+  }
+}
+
+function setupUnits(): void {
+  const sel = $<HTMLSelectElement>("units");
+  const saved = localStorage.getItem("units");
+  if (saved === "imperial" || saved === "metric") {
+    unitSystem = saved;
+    sel.value = saved;
+  }
+  sel.addEventListener("change", () => {
+    unitSystem = sel.value === "imperial" ? "imperial" : "metric";
+    localStorage.setItem("units", unitSystem);
+    renderCurrentReport();
+    relabelCards();
+  });
 }
 
 function drawSparkline(canvas: HTMLCanvasElement, values: number[]): void {
@@ -486,6 +558,66 @@ function setupTabs(): void {
   }
 }
 
+// ---- history ----------------------------------------------------------------
+function setupHistory(): void {
+  if (!window.garage) return;
+  document.querySelector('[data-tab="history"]')?.addEventListener("click", () => void loadHistory());
+  $("btn-history-refresh").addEventListener("click", () => void loadHistory());
+  $("btn-history-clear").addEventListener("click", async () => {
+    await window.garage.history.clear();
+    await loadHistory();
+    $("history-detail").replaceChildren();
+  });
+}
+
+async function loadHistory(): Promise<void> {
+  if (!window.garage) return;
+  const records = await window.garage.history.list();
+  const list = $("history-list");
+  list.replaceChildren();
+  if (records.length === 0) {
+    const li = document.createElement("li");
+    li.className = "muted";
+    li.textContent = "No saved scans yet. Run a diagnostic scan and it will appear here.";
+    list.appendChild(li);
+    return;
+  }
+  records.forEach((record, i) => list.appendChild(historyItem(record, i)));
+}
+
+function historyItem(record: HistoryRecord, index: number): HTMLElement {
+  const snap = record.snapshot as DiagnosticSnapshot;
+  const li = document.createElement("li");
+  const btn = document.createElement("button");
+  btn.className = "history-item";
+  const when = new Date(record.savedAt).toLocaleString();
+  const codes = snap.storedDtcs.length > 0 ? snap.storedDtcs.join(", ") : "no codes";
+  const mil = snap.milOn ? "MIL ON" : "MIL off";
+  const top = document.createElement("div");
+  top.className = "history-when";
+  top.textContent = when;
+  const sub = document.createElement("div");
+  sub.className = "history-sub";
+  sub.textContent = `${mil} · ${snap.reportedDtcCount} DTC${snap.reportedDtcCount === 1 ? "" : "s"} · ${codes}${snap.vin ? ` · ${snap.vin}` : ""}`;
+  btn.append(top, sub);
+  btn.addEventListener("click", () => {
+    for (const el of document.querySelectorAll(".history-item")) el.classList.remove("history-item--active");
+    btn.classList.add("history-item--active");
+    showHistoryRecord(record);
+  });
+  if (index === 0) {
+    btn.classList.add("history-item--active");
+    showHistoryRecord(record);
+  }
+  li.appendChild(btn);
+  return li;
+}
+
+function showHistoryRecord(record: HistoryRecord): void {
+  const report = buildReport(record.snapshot as DiagnosticSnapshot, record.label, unitSystem);
+  renderReport($("history-detail"), report.headline, report.sections, report.caveats, report.text);
+}
+
 async function setupAbout(): Promise<void> {
   if (!window.garage) return;
   try {
@@ -516,6 +648,8 @@ function errMsg(err: unknown): string {
 function main(): void {
   setupTabs();
   setupPicker();
+  setupUnits();
+  setupHistory();
   setupTune();
   void setupAbout();
   $("btn-connect").addEventListener("click", () => void connectSerial());

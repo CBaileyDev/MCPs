@@ -57,9 +57,38 @@ export const PID_FORMULAS: Record<string, PidFormula> = {
   "1F": { pid: "1F", label: "Run Time Since Engine Start", unit: "s", bytes: 2, decode: ([a, b]) => 256 * a + b },
   "21": { pid: "21", label: "Distance With MIL On", unit: "km", bytes: 2, decode: ([a, b]) => 256 * a + b },
   "2F": { pid: "2F", label: "Fuel Tank Level", unit: "%", bytes: 1, decode: ([a]) => r2((a * 100) / 255) },
+  "14": { pid: "14", label: "O2 Sensor 1 Voltage", unit: "V", bytes: 2, decode: ([a]) => r2(a / 200) },
+  "22": { pid: "22", label: "Fuel Rail Pressure (rel. manifold)", unit: "kPa", bytes: 2, decode: ([a, b]) => r2((256 * a + b) * 0.079) },
+  "23": { pid: "23", label: "Fuel Rail Gauge Pressure", unit: "kPa", bytes: 2, decode: ([a, b]) => (256 * a + b) * 10 },
+  "2C": { pid: "2C", label: "Commanded EGR", unit: "%", bytes: 1, decode: ([a]) => r2((a * 100) / 255) },
+  "2D": { pid: "2D", label: "EGR Error", unit: "%", bytes: 1, decode: ([a]) => r2((a - 128) * (100 / 128)) },
+  "2E": { pid: "2E", label: "Commanded Evap Purge", unit: "%", bytes: 1, decode: ([a]) => r2((a * 100) / 255) },
+  "30": { pid: "30", label: "Warm-ups Since Codes Cleared", unit: "count", bytes: 1, decode: ([a]) => a },
+  "31": { pid: "31", label: "Distance Since Codes Cleared", unit: "km", bytes: 2, decode: ([a, b]) => 256 * a + b },
+  "32": {
+    pid: "32",
+    label: "Evap System Vapor Pressure",
+    unit: "Pa",
+    bytes: 2,
+    decode: ([a, b]) => {
+      const raw = 256 * a + b;
+      return (raw > 32767 ? raw - 65536 : raw) / 4; // signed 16-bit
+    }
+  },
   "33": { pid: "33", label: "Barometric Pressure", unit: "kPa", bytes: 1, decode: ([a]) => a },
   "42": { pid: "42", label: "Control Module Voltage", unit: "V", bytes: 2, decode: ([a, b]) => r2((256 * a + b) / 1000) },
+  "43": { pid: "43", label: "Absolute Load Value", unit: "%", bytes: 2, decode: ([a, b]) => r2(((256 * a + b) * 100) / 255) },
+  "44": { pid: "44", label: "Commanded Equivalence Ratio (λ)", unit: "ratio", bytes: 2, decode: ([a, b]) => r2((256 * a + b) / 32768) },
+  "45": { pid: "45", label: "Relative Throttle Position", unit: "%", bytes: 1, decode: ([a]) => r2((a * 100) / 255) },
   "46": { pid: "46", label: "Ambient Air Temperature", unit: "C", bytes: 1, decode: ([a]) => a - 40 },
+  "47": { pid: "47", label: "Absolute Throttle Position B", unit: "%", bytes: 1, decode: ([a]) => r2((a * 100) / 255) },
+  "49": { pid: "49", label: "Accelerator Pedal Position D", unit: "%", bytes: 1, decode: ([a]) => r2((a * 100) / 255) },
+  "4A": { pid: "4A", label: "Accelerator Pedal Position E", unit: "%", bytes: 1, decode: ([a]) => r2((a * 100) / 255) },
+  "4C": { pid: "4C", label: "Commanded Throttle Actuator", unit: "%", bytes: 1, decode: ([a]) => r2((a * 100) / 255) },
+  "4D": { pid: "4D", label: "Time Run With MIL On", unit: "min", bytes: 2, decode: ([a, b]) => 256 * a + b },
+  "4E": { pid: "4E", label: "Time Since Codes Cleared", unit: "min", bytes: 2, decode: ([a, b]) => 256 * a + b },
+  "5A": { pid: "5A", label: "Relative Accelerator Pedal Position", unit: "%", bytes: 1, decode: ([a]) => r2((a * 100) / 255) },
+  "5B": { pid: "5B", label: "Hybrid Battery Pack Remaining Life", unit: "%", bytes: 1, decode: ([a]) => r2((a * 100) / 255) },
   "5C": { pid: "5C", label: "Engine Oil Temperature", unit: "C", bytes: 1, decode: ([a]) => a - 40 },
   "5E": { pid: "5E", label: "Engine Fuel Rate", unit: "L/h", bytes: 2, decode: ([a, b]) => r2((256 * a + b) / 20) }
 };

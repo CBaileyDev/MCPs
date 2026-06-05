@@ -22,6 +22,7 @@ import {
   type MonitorStatus
 } from "./dtc-decode.js";
 import { decodeVinResponse } from "./vin.js";
+import { decodeSupportedPids, SUPPORT_RANGE_PIDS } from "./supported-pids.js";
 
 /** Error raised when the adapter reports a protocol/bus failure. */
 export class ObdError extends Error {
@@ -235,6 +236,36 @@ export class Elm327Client implements ObdReader {
       // Voltage is best-effort; not all adapters support ATRV.
     }
     return undefined;
+  }
+
+  /**
+   * Discover which Mode-01 PIDs the ECU supports by walking the 00/20/40/…
+   * bitmask PIDs. Returns sorted PID hex codes with the range-marker PIDs
+   * removed. Stops at the first unsupported range. Never throws.
+   */
+  async readSupportedPids(): Promise<string[]> {
+    const supported = new Set<string>();
+    for (let base = 0x00; base <= 0xc0; base += 0x20) {
+      const baseHex = base.toString(16).toUpperCase().padStart(2, "0");
+      let data: number[] | undefined;
+      try {
+        const lines = await this.send(`01${baseHex}`);
+        if (this.isNoData(lines)) break;
+        data = this.extractPidData(this.hexLines(lines), 0x41, baseHex);
+      } catch {
+        break;
+      }
+      if (!data || data.length < 4) break;
+      const next = (base + 0x20).toString(16).toUpperCase().padStart(2, "0");
+      let nextSupported = false;
+      for (const pid of decodeSupportedPids(base, data)) {
+        if (pid === next) nextSupported = true;
+        supported.add(pid);
+      }
+      if (!nextSupported) break;
+    }
+    for (const marker of SUPPORT_RANGE_PIDS) supported.delete(marker);
+    return [...supported].sort();
   }
 
   async readVin(): Promise<string | undefined> {

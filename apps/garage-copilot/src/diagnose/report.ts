@@ -10,6 +10,7 @@
  */
 
 import type { DiagnosticSnapshot } from "./session.js";
+import { convertUnit, type UnitSystem } from "../obd/units.js";
 
 export type ReportSection = { title: string; lines: string[] };
 
@@ -53,7 +54,11 @@ export function describeDtcStructure(code: string): string {
 
 const r = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed(2));
 
-export function buildReport(snapshot: DiagnosticSnapshot, vehicleLabel?: string): DiagnosticReport {
+export function buildReport(
+  snapshot: DiagnosticSnapshot,
+  vehicleLabel?: string,
+  unitSystem: UnitSystem = "metric"
+): DiagnosticReport {
   const sections: ReportSection[] = [];
 
   const subject = vehicleLabel ? `${vehicleLabel} — ` : "";
@@ -104,10 +109,11 @@ export function buildReport(snapshot: DiagnosticSnapshot, vehicleLabel?: string)
     lines: readinessLines.length > 0 ? readinessLines : ["No supported monitors reported."]
   });
 
-  // Live data
-  const liveLines = snapshot.livePids.map(
-    p => `${p.label}: ${r(p.value)}${p.unit ? ` ${p.unit}` : ""}`
-  );
+  // Live data (converted to the chosen display units)
+  const liveLines = snapshot.livePids.map(p => {
+    const c = convertUnit(p.value, p.unit, unitSystem);
+    return `${p.label}: ${r(c.value)}${c.unit ? ` ${c.unit}` : ""}`;
+  });
   sections.push({
     title: "Live Snapshot",
     lines: liveLines.length > 0 ? liveLines : ["No live parameters sampled."]

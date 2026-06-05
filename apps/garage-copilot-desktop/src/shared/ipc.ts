@@ -21,7 +21,13 @@ export const IPC = {
   /** renderer -> main: the user picked this portId ("" to cancel). */
   SerialChoose: "serial:choose",
   /** renderer -> main: get app/runtime info. */
-  AppInfo: "app:info"
+  AppInfo: "app:info",
+  /** renderer -> main: list saved scans (newest first). */
+  HistoryList: "history:list",
+  /** renderer -> main: persist a scan record. */
+  HistorySave: "history:save",
+  /** renderer -> main: clear all saved scans. */
+  HistoryClear: "history:clear"
 } as const;
 
 export type AppInfo = {
@@ -29,4 +35,11 @@ export type AppInfo = {
   electron: string;
   chrome: string;
   platform: string;
+};
+
+/** A persisted diagnostic scan. `snapshot` is a DiagnosticSnapshot (opaque to main). */
+export type HistoryRecord = {
+  savedAt: number;
+  label?: string;
+  snapshot: unknown;
 };

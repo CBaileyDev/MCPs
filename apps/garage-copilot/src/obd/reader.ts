@@ -36,6 +36,8 @@ export interface ObdReader {
   readVoltage(): Promise<number | undefined>;
   /** Mode 09 PID 02: the VIN, when the ECU supports it. Optional. */
   readVin?(): Promise<string | undefined>;
+  /** Mode 01 PID 00/20/…: the live PIDs this ECU supports. Optional. */
+  readSupportedPids?(): Promise<string[]>;
   /** Release the underlying transport. */
   close(): Promise<void>;
 }
