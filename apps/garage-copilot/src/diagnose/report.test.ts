@@ -45,6 +45,12 @@ describe("buildReport", () => {
     expect(report.caveats.some(c => /read-only/i.test(c))).toBe(true);
   });
 
+  it("converts live values to imperial when requested", () => {
+    const snap = { ...snapshot, livePids: [{ pid: "05", label: "Engine Coolant Temperature", value: 100, unit: "C" }] };
+    expect(buildReport(snap).text).toContain("Engine Coolant Temperature: 100 C");
+    expect(buildReport(snap, undefined, "imperial").text).toContain("Engine Coolant Temperature: 212 F");
+  });
+
   it("renders DTCs with structural decode and hides unsupported monitors", () => {
     const report = buildReport(snapshot);
     expect(report.text).toContain("P0301 — Powertrain, generic, ignition system or misfire");

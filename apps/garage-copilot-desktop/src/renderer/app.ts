@@ -17,9 +17,12 @@ import {
   assessInjectorsForTarget,
   assessAddedElectricalLoad,
   PID_FORMULAS,
+  convertUnit,
   type ObdReader,
   type Assessment,
-  type TimedSample
+  type TimedSample,
+  type UnitSystem,
+  type DiagnosticSnapshot
 } from "./core.js";
 import { WebSerialTransport } from "./web-serial.js";
 import { toCsv, lineSeverityClass, dtcSearchUrl, dtcCodeInLine, boundedPush } from "./format.js";
@@ -39,6 +42,9 @@ const show = (el: HTMLElement, visible: boolean): void => {
 // ---- connection state -------------------------------------------------------
 type Connection = { client: ObdReader; label: string; demo: boolean };
 let conn: Connection | null = null;
+let unitSystem: UnitSystem = "metric";
+let lastSnapshot: DiagnosticSnapshot | null = null;
+let lastLabel: string | undefined;
 let liveTimer: number | null = null;
 let liveSamples: TimedSample[] = [];
 type LiveCard = { valueEl: HTMLElement; canvas: HTMLCanvasElement };
@@ -223,14 +229,21 @@ async function runScan(): Promise<void> {
   btn.disabled = true;
   out.replaceChildren(infoLine("Scanning… reading status, codes, readiness, and live data."));
   try {
-    const snapshot = await runDiagnosticSession(c.client);
-    const report = buildReport(snapshot, c.demo ? "Demo vehicle" : undefined);
-    renderReport(out, report.headline, report.sections, report.caveats, report.text);
+    lastSnapshot = await runDiagnosticSession(c.client);
+    lastLabel = c.demo ? "Demo vehicle" : undefined;
+    renderCurrentReport();
   } catch (err) {
     out.replaceChildren(errorLine(`Scan failed: ${errMsg(err)}`));
   } finally {
     btn.disabled = false;
   }
+}
+
+/** Re-render the most recent scan with the current display units. */
+function renderCurrentReport(): void {
+  if (!lastSnapshot) return;
+  const report = buildReport(lastSnapshot, lastLabel, unitSystem);
+  renderReport($("diagnose-output"), report.headline, report.sections, report.caveats, report.text);
 }
 
 function renderReport(
@@ -387,13 +400,40 @@ function updateCard(pid: string, label: string, value: number, unit?: string): v
     entry = { valueEl, canvas };
     liveCards.set(pid, entry);
   }
-  entry.valueEl.textContent = `${value}${unit ? ` ${unit}` : ""}`;
+  const display = convertUnit(value, unit, unitSystem);
+  entry.valueEl.textContent = `${display.value}${display.unit ? ` ${display.unit}` : ""}`;
 
   const hist = liveHistory.get(pid) ?? [];
-  hist.push(value);
+  hist.push(value); // store raw/metric so the sparkline + trends stay consistent
   if (hist.length > SPARK_MAX) hist.shift();
   liveHistory.set(pid, hist);
   drawSparkline(entry.canvas, hist);
+}
+
+/** Re-display existing live cards in the current units (instant toggle feedback). */
+function relabelCards(): void {
+  for (const [pid, entry] of liveCards) {
+    const hist = liveHistory.get(pid);
+    if (!hist || hist.length === 0) continue;
+    const def = PID_FORMULAS[pid];
+    const display = convertUnit(hist[hist.length - 1], def?.unit, unitSystem);
+    entry.valueEl.textContent = `${display.value}${display.unit ? ` ${display.unit}` : ""}`;
+  }
+}
+
+function setupUnits(): void {
+  const sel = $<HTMLSelectElement>("units");
+  const saved = localStorage.getItem("units");
+  if (saved === "imperial" || saved === "metric") {
+    unitSystem = saved;
+    sel.value = saved;
+  }
+  sel.addEventListener("change", () => {
+    unitSystem = sel.value === "imperial" ? "imperial" : "metric";
+    localStorage.setItem("units", unitSystem);
+    renderCurrentReport();
+    relabelCards();
+  });
 }
 
 function drawSparkline(canvas: HTMLCanvasElement, values: number[]): void {
@@ -546,6 +586,7 @@ function errMsg(err: unknown): string {
 function main(): void {
   setupTabs();
   setupPicker();
+  setupUnits();
   setupTune();
   void setupAbout();
   $("btn-connect").addEventListener("click", () => void connectSerial());
