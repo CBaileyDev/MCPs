@@ -12,8 +12,10 @@
     "build": "npm run build:core && npm run build:app",
     "typecheck": "tsc --noEmit",
     "start": "npm run build && electron .",
+    "app": "electron .",
     "dist": "npm run build && electron-builder",
     "smoke": "electron scripts/smoke.cjs",
+    "stress": "electron scripts/stress.cjs",
     "test": "vitest run"
   },
   "devDependencies": {

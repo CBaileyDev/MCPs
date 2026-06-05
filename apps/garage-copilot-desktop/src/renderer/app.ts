@@ -40,7 +40,8 @@ type Connection = { client: ObdReader; label: string; demo: boolean };
 let conn: Connection | null = null;
 let liveTimer: number | null = null;
 let liveSamples: TimedSample[] = [];
-const liveCards = new Map<string, HTMLElement>();
+type LiveCard = { valueEl: HTMLElement; canvas: HTMLCanvasElement };
+const liveCards = new Map<string, LiveCard>();
 const liveHistory = new Map<string, number[]>();
 const LIVE_PIDS = ["0C", "0D", "05", "0F", "11", "06", "07", "42"];
 const SPARK_MAX = 60;
@@ -256,18 +257,23 @@ function renderReport(
   const save = document.createElement("button");
   save.className = "ghost";
   save.textContent = "Save report (.md)";
-  save.addEventListener("click", () => {
-    const blob = new Blob([fullText], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "garage-copilot-report.md";
-    a.click();
-    URL.revokeObjectURL(url);
-  });
+  save.addEventListener("click", () => downloadText(fullText, "garage-copilot-report.md", "text/markdown"));
 
   actions.append(copy, save);
   out.appendChild(actions);
+}
+
+/** Trigger a file download of `data`. The anchor is attached and the object URL
+ *  is revoked after a delay, so the download is never truncated or cancelled. */
+function downloadText(data: string, filename: string, mime: string): void {
+  const url = URL.createObjectURL(new Blob([data], { type: mime }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // ---- live monitor -----------------------------------------------------------
@@ -323,30 +329,32 @@ function stopLive(): void {
 }
 
 function updateCard(pid: string, label: string, value: number, unit?: string): void {
-  let card = liveCards.get(pid);
-  if (!card) {
-    card = document.createElement("div");
+  // Cache the value/canvas refs so the per-second tick never re-queries the DOM.
+  let entry = liveCards.get(pid);
+  if (!entry) {
+    const card = document.createElement("div");
     card.className = "live-card";
-    const l = document.createElement("div");
-    l.className = "live-label";
-    l.textContent = label;
-    const v = document.createElement("div");
-    v.className = "live-value";
+    const labelEl = document.createElement("div");
+    labelEl.className = "live-label";
+    labelEl.textContent = label;
+    const valueEl = document.createElement("div");
+    valueEl.className = "live-value";
     const canvas = document.createElement("canvas");
     canvas.className = "spark";
     canvas.width = 300;
     canvas.height = 48;
-    card.append(l, v, canvas);
-    liveCards.set(pid, card);
+    card.append(labelEl, valueEl, canvas);
     $("live-cards").appendChild(card);
+    entry = { valueEl, canvas };
+    liveCards.set(pid, entry);
   }
-  (card.querySelector(".live-value") as HTMLElement).textContent = `${value}${unit ? ` ${unit}` : ""}`;
+  entry.valueEl.textContent = `${value}${unit ? ` ${unit}` : ""}`;
 
   const hist = liveHistory.get(pid) ?? [];
   hist.push(value);
   if (hist.length > SPARK_MAX) hist.shift();
   liveHistory.set(pid, hist);
-  drawSparkline(card.querySelector(".spark") as HTMLCanvasElement, hist);
+  drawSparkline(entry.canvas, hist);
 }
 
 function drawSparkline(canvas: HTMLCanvasElement, values: number[]): void {
@@ -375,13 +383,7 @@ function drawSparkline(canvas: HTMLCanvasElement, values: number[]): void {
 
 function exportLiveCsv(): void {
   if (liveSamples.length === 0) return;
-  const blob = new Blob([toCsv(liveSamples)], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "garage-copilot-live.csv";
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadText(toCsv(liveSamples), "garage-copilot-live.csv", "text/csv");
 }
 
 function renderFlags(): void {
