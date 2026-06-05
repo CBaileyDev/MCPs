@@ -45,6 +45,10 @@ linux:
   icon: build/icon.png
   category: Utility
   synopsis: Read-only OBD-II diagnostics, monitoring, and tune advice
+  # The .deb target requires a maintainer; a clean artifact name avoids the
+  # scoped package name (@cbaileydev/…) leaking into the file.
+  maintainer: CBaileyDev <cbaileydev@users.noreply.github.com>
+  artifactName: ${productName}-${version}.${ext}
   target:
     - AppImage
     - deb
