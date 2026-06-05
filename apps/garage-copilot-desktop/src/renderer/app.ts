@@ -166,14 +166,16 @@ function openPicker(ports: SerialPortInfo[]): void {
 
 // ---- diagnose ---------------------------------------------------------------
 async function runScan(): Promise<void> {
-  if (!conn) return;
+  // Capture the connection up front so a disconnect mid-scan can't null-deref.
+  const c = conn;
+  if (!c) return;
   const out = $("diagnose-output");
   const btn = $<HTMLButtonElement>("btn-scan");
   btn.disabled = true;
   out.replaceChildren(infoLine("Scanning… reading status, codes, readiness, and live data."));
   try {
-    const snapshot = await runDiagnosticSession(conn.client);
-    const report = buildReport(snapshot, conn.demo ? "Demo vehicle" : undefined);
+    const snapshot = await runDiagnosticSession(c.client);
+    const report = buildReport(snapshot, c.demo ? "Demo vehicle" : undefined);
     renderReport(out, report.headline, report.sections, report.caveats, report.text);
   } catch (err) {
     out.replaceChildren(errorLine(`Scan failed: ${errMsg(err)}`));
@@ -270,20 +272,29 @@ function startLive(): void {
   show($("btn-live-start"), false);
   show($("btn-live-stop"), true);
   show($("btn-live-export"), true);
+  // Guard against overlapping rounds: on a slow adapter a tick can outlast the
+  // interval, which would back up the command queue unboundedly.
+  let inFlight = false;
   const tick = async (): Promise<void> => {
-    if (!conn) return;
-    for (const pid of LIVE_PIDS) {
-      try {
-        const decoded = await conn.client.readLivePid(pid);
-        if (decoded && typeof decoded.value === "number") {
-          updateCard(decoded.pid, decoded.label, decoded.value, decoded.unit);
-          liveSamples.push({ pid: decoded.pid, label: decoded.label, value: decoded.value, unit: decoded.unit, t: Date.now() });
+    const c = conn;
+    if (!c || inFlight) return;
+    inFlight = true;
+    try {
+      for (const pid of LIVE_PIDS) {
+        try {
+          const decoded = await c.client.readLivePid(pid);
+          if (decoded && typeof decoded.value === "number") {
+            updateCard(decoded.pid, decoded.label, decoded.value, decoded.unit);
+            liveSamples.push({ pid: decoded.pid, label: decoded.label, value: decoded.value, unit: decoded.unit, t: Date.now() });
+          }
+        } catch {
+          /* skip this PID this round */
         }
-      } catch {
-        /* skip this PID this round */
       }
+      renderFlags();
+    } finally {
+      inFlight = false;
     }
-    renderFlags();
   };
   void tick();
   liveTimer = window.setInterval(() => void tick(), 1000);

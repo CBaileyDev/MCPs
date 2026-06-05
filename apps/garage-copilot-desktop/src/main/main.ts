@@ -50,6 +50,9 @@ function createWindow(): BrowserWindow {
   // choose. Forward the candidates to the renderer's picker and wait.
   ses.on("select-serial-port", (event, portList, _webContents, callback) => {
     event.preventDefault();
+    // Release any earlier pending request that was never resolved (e.g. the user
+    // clicked Connect twice) so its requestPort() promise doesn't hang forever.
+    if (pendingPortCallback) pendingPortCallback("");
     pendingPortCallback = callback;
     const ports: SerialPortInfo[] = portList.map(p => ({
       portId: p.portId,
