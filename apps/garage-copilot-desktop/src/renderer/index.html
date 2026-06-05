@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Garage Copilot</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">🔧 Garage Copilot</div>
+        <div class="conn">
+          <span id="status-pill" class="pill pill--off">Disconnected</span>
+          <select id="baud" class="baud" title="Adapter baud rate">
+            <option value="38400" selected>38400 baud</option>
+            <option value="9600">9600 baud</option>
+            <option value="115200">115200 baud</option>
+            <option value="500000">500000 baud</option>
+          </select>
+          <button id="btn-connect" class="primary">Connect OBD-II</button>
+          <button id="btn-demo" class="ghost">Demo mode</button>
+          <button id="btn-disconnect" class="ghost" hidden>Disconnect</button>
+        </div>
+      </header>
+
+      <nav class="tabs">
+        <button class="tab tab--active" data-tab="diagnose">Diagnose</button>
+        <button class="tab" data-tab="live">Live Monitor</button>
+        <button class="tab" data-tab="tune">Tune Advisor</button>
+        <button class="tab" data-tab="about">About</button>
+      </nav>
+
+      <main>
+        <!-- Diagnose -->
+        <section id="tab-diagnose" class="panel">
+          <div class="panel-head">
+            <h2>Diagnostic Scan</h2>
+            <button id="btn-scan" class="primary" disabled>Run Diagnostic Scan</button>
+          </div>
+          <div id="diagnose-output" class="output">
+            <p class="muted">Connect an adapter (or pick Demo mode) and run a scan.</p>
+          </div>
+        </section>
+
+        <!-- Live Monitor -->
+        <section id="tab-live" class="panel" hidden>
+          <div class="panel-head">
+            <h2>Live Monitor</h2>
+            <div>
+              <button id="btn-live-start" class="primary" disabled>Start</button>
+              <button id="btn-live-stop" class="ghost" hidden>Stop</button>
+              <button id="btn-live-export" class="ghost" hidden>Export CSV</button>
+            </div>
+          </div>
+          <div id="live-cards" class="cards"></div>
+          <div id="live-flags" class="flags"></div>
+        </section>
+
+        <!-- Tune Advisor -->
+        <section id="tab-tune" class="panel" hidden>
+          <h2>Tune Advisor <span class="muted">— planning math, read-only (never flashes the ECU)</span></h2>
+          <div class="advisor-grid">
+            <div class="card">
+              <h3>Final-drive change</h3>
+              <label>Speed (mph) <input id="fd-speed" type="number" value="70" /></label>
+              <label>Tire diameter (in) <input id="fd-tire" type="number" value="28" /></label>
+              <label>Top gear ratio <input id="fd-gear" type="number" step="0.01" value="0.72" /></label>
+              <label>Current final drive <input id="fd-from" type="number" step="0.01" value="3.73" /></label>
+              <label>New final drive <input id="fd-to" type="number" step="0.01" value="4.10" /></label>
+              <button id="btn-fd" class="primary">Assess</button>
+              <div id="result-fd" class="result"></div>
+            </div>
+
+            <div class="card">
+              <h3>Injector sizing</h3>
+              <label>Target HP <input id="inj-hp" type="number" value="400" /></label>
+              <label>Cylinders <input id="inj-cyl" type="number" value="8" /></label>
+              <label>Proposed injector (cc/min, optional) <input id="inj-size" type="number" placeholder="e.g. 440" /></label>
+              <button id="btn-inj" class="primary">Assess</button>
+              <div id="result-inj" class="result"></div>
+            </div>
+
+            <div class="card">
+              <h3>Added electrical load</h3>
+              <label>System voltage <input id="load-volt" type="number" step="0.1" value="13.8" /></label>
+              <label>Existing load (A) <input id="load-existing" type="number" value="60" /></label>
+              <label>Added accessory (W) <input id="load-watts" type="number" value="690" /></label>
+              <label>Alternator rating (A) <input id="load-alt" type="number" value="130" /></label>
+              <button id="btn-load" class="primary">Assess</button>
+              <div id="result-load" class="result"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- About -->
+        <section id="tab-about" class="panel" hidden>
+          <h2>About Garage Copilot</h2>
+          <p>
+            A read-only co-pilot for your car. It plugs into the OBD-II port through a standard ELM327
+            adapter (USB or Bluetooth) using the Web Serial API, and turns what the car reports into a
+            clear diagnostic picture. It never clears codes, writes to the ECU, or runs active tests.
+          </p>
+          <ul>
+            <li><strong>Diagnose</strong> — MIL status, trouble codes (with structural decode), I/M readiness, live snapshot.</li>
+            <li><strong>Live Monitor</strong> — stream key parameters and flag fuel-trim drift, overheating, and weak charging.</li>
+            <li><strong>Tune Advisor</strong> — validate a proposed change (gearing, injectors, electrical load) before committing.</li>
+          </ul>
+          <p class="muted">
+            Everything shown is evidence to verify against service information — not a definitive repair
+            diagnosis. The "tune" tools are planning math only; flashing an ECU is done with a proper
+            licensed tool, and on-road emissions tuning is regulated.
+          </p>
+          <p id="about-info" class="muted"></p>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <details id="log-wrap">
+          <summary>Adapter log</summary>
+          <pre id="adapter-log" class="adapter-log">Connect a real adapter to see the ELM327 command/response traffic here.</pre>
+        </details>
+      </footer>
+
+      <!-- Serial picker (Electron) -->
+      <div id="picker" class="modal" hidden>
+        <div class="modal-card">
+          <h3>Select your OBD-II adapter</h3>
+          <ul id="picker-list" class="picker-list"></ul>
+          <button id="picker-cancel" class="ghost">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

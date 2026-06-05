@@ -29,6 +29,16 @@ Codex, and other MCP clients to useful tools and public data sources.
 returns a clear "provider not configured" error until marketplace API
 credentials (e.g. eBay) are set. No ToS-violating scraping is included.
 
+## Applications
+
+Beyond the individual servers, `apps/` holds end-user tools that tie them
+together.
+
+| App | Purpose |
+| --- | --- |
+| [Garage Copilot](./apps/garage-copilot) | The engine + CLI. A live ELM327 OBD-II driver plus **diagnose / monitor / tune-advise** logic, and the Claude wiring (combined MCP config + diagnostic playbook) that orchestrates every server in this repo. Read-only; runs fully offline via a replay adapter (no hardware or API key needed to try it). |
+| [Garage Copilot Desktop](./apps/garage-copilot-desktop) | The **GUI**. A macOS (and Windows/Linux) Electron desktop app that plugs into the car's OBD-II port via Web Serial and presents diagnose / live-monitor / tune-advise screens. Reuses the engine above; includes a built-in Demo mode so it runs with no hardware. |
+
 ## Repository Layout
 
 ```text
@@ -50,6 +60,9 @@ servers/
   automotive-electrical/
   engine-build-math/
   towing-payload-math/
+apps/
+  garage-copilot/          # engine + CLI
+  garage-copilot-desktop/  # macOS GUI (Electron)
 docs/
   roadmaps/
   superpowers/
@@ -60,7 +73,8 @@ docs/
 Each MCP server lives in its own folder under `servers/` with its own
 README, package metadata, tests, and client configuration examples. Servers are
 self-contained (own `package.json`, lockfile, and `tsconfig.json`); there is no
-workspace root.
+workspace root. Applications under `apps/` follow the same self-contained
+convention.
 
 ## Documentation
 
