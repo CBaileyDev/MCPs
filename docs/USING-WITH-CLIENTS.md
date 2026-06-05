@@ -14,6 +14,10 @@ for d in servers/*/; do (cd "$d" && npm install && npm run build); done
 
 (or just `cd servers/<name> && npm install && npm run build` for a single one.)
 
+> **Tip:** the [Garage Copilot](../apps/garage-copilot) app can generate the
+> combined config below for you:
+> `node apps/garage-copilot/dist/cli.js mcp-config --root /ABS/PATH/TO/MCPs`.
+
 ## Combined configuration
 
 Replace `/ABS/PATH/TO/MCPs` with the absolute path to your clone. All of these

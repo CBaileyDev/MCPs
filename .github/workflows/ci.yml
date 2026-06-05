@@ -48,3 +48,24 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
+
+  # The garage-copilot app lives under apps/ and is also self-contained. Its
+  # tests are hermetic (the live OBD bridge is exercised via an in-memory replay
+  # transport; the native `serialport` module is intentionally not a dependency).
+  app:
+    name: garage-copilot
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/garage-copilot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/garage-copilot/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
