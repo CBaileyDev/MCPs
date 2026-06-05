@@ -1,8 +1,15 @@
-# electron-builder config. Run `npm run dist` ON A MAC to produce a .dmg/.zip.
-# (Building a macOS target requires macOS.) The output goes to release/ so it
-# does not collide with esbuild's dist/ bundles.
+# electron-builder config. `npm run dist` packages the app for the host OS:
+#   - on macOS  → .dmg + .zip
+#   - on Windows → NSIS installer (.exe) + .zip
+#   - on Linux  → AppImage + .deb
+# Each platform must be built on its own OS (electron-builder can't cross-build
+# a Mac target off Windows, etc.); the desktop-release workflow does all three on
+# native GitHub runners. Output goes to release/ so it doesn't collide with
+# esbuild's dist/ bundles.
 appId: com.cbaileydev.garagecopilot
 productName: Garage Copilot
+# Deterministic binary name on Windows/Linux (mac uses the .app bundle name).
+executableName: garage-copilot
 directories:
   output: release
 # Everything the app needs at runtime is bundled into dist/ by esbuild (the
@@ -23,3 +30,21 @@ mac:
   identity: null
 dmg:
   title: Garage Copilot
+win:
+  icon: build/icon.png
+  target:
+    - nsis
+    - zip
+  # Unsigned: Windows SmartScreen will warn until a code-signing cert is added.
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${productName}-${version}-Setup.${ext}
+linux:
+  icon: build/icon.png
+  category: Utility
+  synopsis: Read-only OBD-II diagnostics, monitoring, and tune advice
+  target:
+    - AppImage
+    - deb
