@@ -104,6 +104,15 @@ button.ghost {
   background: transparent;
 }
 
+.baud {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
 /* Tabs */
 .tabs {
   display: flex;

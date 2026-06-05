@@ -16,6 +16,12 @@
         <div class="brand">🔧 Garage Copilot</div>
         <div class="conn">
           <span id="status-pill" class="pill pill--off">Disconnected</span>
+          <select id="baud" class="baud" title="Adapter baud rate">
+            <option value="38400" selected>38400 baud</option>
+            <option value="9600">9600 baud</option>
+            <option value="115200">115200 baud</option>
+            <option value="500000">500000 baud</option>
+          </select>
           <button id="btn-connect" class="primary">Connect OBD-II</button>
           <button id="btn-demo" class="ghost">Demo mode</button>
           <button id="btn-disconnect" class="ghost" hidden>Disconnect</button>

@@ -22,8 +22,10 @@ you can try the whole flow right now.
 | **OBD bridge** | `src/obd/elm327.ts` | A real ELM327 AT-command + OBD protocol driver, written against a transport interface so it's 100% testable without hardware. |
 | | `src/obd/pid-formulas.ts` | Standard SAE J1979 Mode-01 PID decode formulas (RPM, coolant, fuel trims, …). |
 | | `src/obd/dtc-decode.ts` | DTC byte → code decode (P0301, …) and Mode-01 PID-01 monitor/readiness decode. |
+| | `src/obd/vin.ts` | Decode the VIN from a Mode-09 PID-02 response (tolerant of multi-frame ISO-TP). |
 | | `src/obd/serial-transport.ts` | Live USB/Bluetooth transport via `serialport` (lazy-loaded; install it only when you want real hardware). |
 | | `src/obd/replay-transport.ts` | Offline transport that replays a canned vehicle — powers `--demo` and the tests. |
+| | `src/obd/simulator.ts` | A `SimulatedObdReader` with time-varying idle data (RPM wander, coolant warm-up) for demos and dev. |
 | **Diagnose** | `src/diagnose/session.ts` | One read-only pass → a `DiagnosticSnapshot` (MIL, DTCs, readiness, live data). |
 | | `src/diagnose/report.ts` | Snapshot → a structured, caveated report with structural DTC decode. |
 | **Monitor** | `src/monitor/recorder.ts` | Sample PIDs over several rounds into a time series (injected clock — deterministic). |

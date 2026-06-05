@@ -84,7 +84,8 @@ async function connectSerial(): Promise<void> {
   setStatus("Select your adapter…", "connecting");
   try {
     const port = await navigator.serial.requestPort();
-    const transport = new WebSerialTransport(port);
+    const baudRate = Number($<HTMLSelectElement>("baud").value) || 38400;
+    const transport = new WebSerialTransport(port, { baudRate });
     await transport.start();
     await activate(new Elm327Client(transport), "OBD-II adapter", false);
   } catch (err) {
