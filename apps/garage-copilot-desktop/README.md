@@ -18,13 +18,22 @@ connection.
 
 ![Diagnose](./assets/screenshots/diagnose.png)
 
-**Live Monitor** — streaming parameters with conservative health flags:
+**Live Monitor** — streaming parameters with sparklines and health flags. The
+gauges **adapt to your car**: on connect it discovers which PIDs the ECU actually
+supports and shows those (no wasted polls on unsupported parameters):
 
 ![Live Monitor](./assets/screenshots/live.png)
 
 **Tune Advisor** — validate a change (gearing, injectors, electrical load) before you commit:
 
 ![Tune Advisor](./assets/screenshots/tune.png)
+
+**History** — every scan is saved automatically so you can track the vehicle over time:
+
+![History](./assets/screenshots/history.png)
+
+There's also a **Metric / Imperial** units toggle (°C↔°F, km/h↔mph, kPa↔psi, …)
+that applies across the report, live gauges, and saved scans.
 
 ## Run it
 
