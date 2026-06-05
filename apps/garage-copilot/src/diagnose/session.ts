@@ -29,6 +29,8 @@ export type DiagnosticSnapshot = {
   notReadyMonitors: string[];
   livePids: DecodedPid[];
   voltage?: number;
+  /** VIN read over Mode 09, when the ECU supports it. */
+  vin?: string;
   /** Non-fatal problems encountered while reading (e.g. an unsupported PID). */
   warnings: string[];
 };
@@ -75,6 +77,9 @@ export async function runDiagnosticSession(
   }
 
   const voltage = await safe(() => reader.readVoltage(), warnings, "read voltage (ATRV)", undefined);
+  const vin = reader.readVin
+    ? await safe(() => reader.readVin!(), warnings, "read VIN (mode 09)", undefined)
+    : undefined;
 
   return {
     capturedAt: now().toISOString(),
@@ -89,6 +94,7 @@ export async function runDiagnosticSession(
     notReadyMonitors: status.monitors.filter(m => m.state === "not-ready").map(m => m.name),
     livePids,
     voltage,
+    vin,
     warnings
   };
 }

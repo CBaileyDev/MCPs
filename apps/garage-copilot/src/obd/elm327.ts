@@ -21,6 +21,7 @@ import {
   parseHexBytes,
   type MonitorStatus
 } from "./dtc-decode.js";
+import { decodeVinResponse } from "./vin.js";
 
 /** Error raised when the adapter reports a protocol/bus failure. */
 export class ObdError extends Error {
@@ -213,6 +214,20 @@ export class Elm327Client implements ObdReader {
       // Voltage is best-effort; not all adapters support ATRV.
     }
     return undefined;
+  }
+
+  async readVin(): Promise<string | undefined> {
+    try {
+      const lines = await this.send("0902");
+      this.assertNoBusError(lines, "0902");
+      if (this.isNoData(lines)) return undefined;
+      // Pass raw lines (not hexLines): VIN frames may carry an ISO-TP index
+      // prefix that decodeVinResponse strips itself.
+      return decodeVinResponse(lines);
+    } catch {
+      // VIN (mode 09) is not supported by every ECU; treat as unavailable.
+      return undefined;
+    }
   }
 
   async close(): Promise<void> {

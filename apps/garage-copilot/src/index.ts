@@ -31,6 +31,7 @@ export {
   type ReadinessMonitor,
   type MonitorState
 } from "./obd/dtc-decode.js";
+export { decodeVinResponse, isValidVin } from "./obd/vin.js";
 
 // Diagnose
 export { runDiagnosticSession, type DiagnosticSnapshot, type SessionOptions } from "./diagnose/session.js";

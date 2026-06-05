@@ -36,6 +36,9 @@ export const DEMO_VEHICLE: ReplayScript = {
   "07": "NO DATA", // no pending codes
   "0A": "NO DATA", // no permanent codes
 
+  // VIN (Mode 09 PID 02): ASCII for "1HGBH41JXMN109186" after the 49 02 01 header.
+  "0902": "49 02 01 31 48 47 42 48 34 31 4A 58 4D 4E 31 30 39 31 38 36",
+
   // --- Live PIDs (idle) --------------------------------------------------
   "010C": "41 0C 0C B0", // RPM   = (256*12+176)/4 = 812 rpm
   "010D": "41 0D 00", // Speed = 0 km/h

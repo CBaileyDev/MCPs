@@ -21,6 +21,7 @@ describe("runDiagnosticSession against the demo vehicle", () => {
     expect(snap.pendingDtcs).toEqual([]);
     expect(snap.notReadyMonitors).toContain("Catalyst");
     expect(snap.voltage).toBe(14.2);
+    expect(snap.vin).toBe("1HGBH41JXMN109186");
     // The default PID set is sampled and decoded.
     const rpm = snap.livePids.find(p => p.pid === "0C");
     expect(rpm?.value).toBe(812);

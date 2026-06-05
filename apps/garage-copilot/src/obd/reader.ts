@@ -34,6 +34,8 @@ export interface ObdReader {
   readLivePid(pid: string): Promise<DecodedPid | undefined>;
   /** ATRV: control-module / battery voltage in volts, when available. */
   readVoltage(): Promise<number | undefined>;
+  /** Mode 09 PID 02: the VIN, when the ECU supports it. Optional. */
+  readVin?(): Promise<string | undefined>;
   /** Release the underlying transport. */
   close(): Promise<void>;
 }

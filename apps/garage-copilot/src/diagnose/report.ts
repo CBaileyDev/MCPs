@@ -66,6 +66,7 @@ export function buildReport(snapshot: DiagnosticSnapshot, vehicleLabel?: string)
     title: "Overview",
     lines: [
       `Adapter: ${snapshot.identity.description} (${snapshot.identity.protocol})`,
+      ...(snapshot.vin ? [`VIN: ${snapshot.vin}`] : []),
       `Engine type: ${snapshot.ignitionType}-ignition`,
       `MIL (check-engine light): ${snapshot.milOn ? "ON" : "off"}`,
       `ECU-reported DTC count: ${snapshot.reportedDtcCount}`,
