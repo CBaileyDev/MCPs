@@ -31,6 +31,18 @@ describe("SimulatedObdReader", () => {
     expect(await reader.readLivePid("ZZ")).toBeUndefined();
   });
 
+  it("advertises a set of supported PIDs and decodes each one", async () => {
+    const reader = new SimulatedObdReader();
+    const supported = await reader.readSupportedPids();
+    expect(supported).toContain("0C");
+    expect(supported.length).toBeGreaterThanOrEqual(12);
+    for (const pid of supported) {
+      const decoded = await reader.readLivePid(pid);
+      expect(decoded, `PID ${pid} should decode`).toBeDefined();
+      expect(typeof decoded!.value).toBe("number");
+    }
+  });
+
   it("drives a full diagnostic session", async () => {
     const snap = await runDiagnosticSession(new SimulatedObdReader());
     expect(snap.milOn).toBe(true);

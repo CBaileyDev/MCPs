@@ -16,6 +16,7 @@ import {
   assessFinalDriveChange,
   assessInjectorsForTarget,
   assessAddedElectricalLoad,
+  PID_FORMULAS,
   type ObdReader,
   type Assessment,
   type TimedSample
@@ -43,7 +44,12 @@ let liveSamples: TimedSample[] = [];
 type LiveCard = { valueEl: HTMLElement; canvas: HTMLCanvasElement };
 const liveCards = new Map<string, LiveCard>();
 const liveHistory = new Map<string, number[]>();
-const LIVE_PIDS = ["0C", "0D", "05", "0F", "11", "06", "07", "42"];
+// Fallback PIDs when capability discovery is unavailable or empty.
+const DEFAULT_LIVE_PIDS = ["0C", "0D", "05", "0F", "11", "06", "07", "42"];
+// Preferred display order (most useful first); the rest follow.
+const PID_PRIORITY = ["0C", "0D", "05", "04", "0B", "10", "0E", "11", "0F", "06", "07", "42", "2F", "46", "5C", "33"];
+const MONITOR_PID_CAP = 16;
+let monitorPids: string[] = DEFAULT_LIVE_PIDS;
 const SPARK_MAX = 60;
 // Cap the live sample buffer (~8 min at 8 PIDs/s) so memory and per-tick trend
 // analysis stay flat over a long monitor session. CSV export covers this window.
@@ -89,6 +95,9 @@ async function activate(client: ObdReader, label: string, demo: boolean): Promis
   try {
     const id = await client.initialize();
     conn = { client, label, demo };
+    // Discover which live PIDs this car actually supports so the monitor adapts
+    // to the vehicle instead of polling a fixed (often unsupported) set.
+    monitorPids = await discoverMonitorPids(client);
     setStatus(`${demo ? "Demo" : "Connected"} · ${id.description} · ${id.protocol}`, "on");
     setConnectedUi(true);
   } catch (err) {
@@ -98,6 +107,27 @@ async function activate(client: ObdReader, label: string, demo: boolean): Promis
     } catch {
       /* ignore */
     }
+  }
+}
+
+/**
+ * Ask the ECU which live PIDs it supports, keep only those we can decode, and
+ * order them for display (preferred first), capped for a tidy grid. Falls back
+ * to a sensible default if discovery is unavailable or empty.
+ */
+async function discoverMonitorPids(client: ObdReader): Promise<string[]> {
+  if (!client.readSupportedPids) return DEFAULT_LIVE_PIDS;
+  try {
+    const supported = await client.readSupportedPids();
+    const decodable = supported.filter(p => p in PID_FORMULAS);
+    if (decodable.length === 0) return DEFAULT_LIVE_PIDS;
+    const ordered = [
+      ...PID_PRIORITY.filter(p => decodable.includes(p)),
+      ...decodable.filter(p => !PID_PRIORITY.includes(p))
+    ];
+    return ordered.slice(0, MONITOR_PID_CAP);
+  } catch {
+    return DEFAULT_LIVE_PIDS;
   }
 }
 
@@ -304,7 +334,7 @@ function startLive(): void {
     if (!c || inFlight) return;
     inFlight = true;
     try {
-      for (const pid of LIVE_PIDS) {
+      for (const pid of monitorPids) {
         try {
           const decoded = await c.client.readLivePid(pid);
           if (decoded && typeof decoded.value === "number") {

@@ -91,9 +91,28 @@ export class SimulatedObdReader implements ObdReader {
         return 7 + 1.5 * wobble(0.15);
       case "42": // Module voltage
         return 14.2 + 0.12 * wobble(0.5);
+      case "04": // Calculated engine load — light at idle
+        return 18 + 5 * wobble(0.8);
+      case "0B": // Intake manifold pressure — idle vacuum
+        return 33 + 4 * wobble(0.7);
+      case "0E": // Timing advance
+        return 10 + 4 * wobble(0.5);
+      case "10": // Mass air flow — idle
+        return 3.2 + 0.6 * wobble(0.9);
+      case "2F": // Fuel tank level
+        return 62 - t * 0.002;
+      case "46": // Ambient air temp
+        return 22;
+      case "5C": // Oil temp — warms slower than coolant
+        return Math.min(98, 40 + 58 * (1 - Math.exp(-t / 55)));
       default:
         return undefined;
     }
+  }
+
+  /** The PIDs this simulated ECU "supports" — a realistic spark-ignition set. */
+  async readSupportedPids(): Promise<string[]> {
+    return ["04", "05", "06", "07", "0B", "0C", "0D", "0E", "0F", "10", "11", "2F", "42", "46", "5C"];
   }
 
   async close(): Promise<void> {
