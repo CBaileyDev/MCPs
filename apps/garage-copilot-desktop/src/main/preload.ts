@@ -5,7 +5,7 @@
  */
 
 import { contextBridge, ipcRenderer } from "electron";
-import { IPC, type AppInfo, type SerialPortInfo } from "../shared/ipc.js";
+import { IPC, type AppInfo, type HistoryRecord, type SerialPortInfo } from "../shared/ipc.js";
 
 const api = {
   /** Subscribe to the list of serial ports Electron offers; returns an unsubscribe. */
@@ -21,6 +21,18 @@ const api = {
   /** Runtime/app info for the About area. */
   appInfo(): Promise<AppInfo> {
     return ipcRenderer.invoke(IPC.AppInfo);
+  },
+  /** Saved-scan history (persisted in the app's user-data dir). */
+  history: {
+    list(): Promise<HistoryRecord[]> {
+      return ipcRenderer.invoke(IPC.HistoryList);
+    },
+    save(record: HistoryRecord): Promise<HistoryRecord[]> {
+      return ipcRenderer.invoke(IPC.HistorySave, record);
+    },
+    clear(): Promise<void> {
+      return ipcRenderer.invoke(IPC.HistoryClear);
+    }
   }
 };
 

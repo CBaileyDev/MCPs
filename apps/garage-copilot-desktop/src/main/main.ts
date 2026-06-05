@@ -10,7 +10,29 @@
 
 import { app, BrowserWindow, ipcMain, Menu, session, shell, type IpcMainEvent, type MenuItemConstructorOptions } from "electron";
 import { join } from "node:path";
-import { IPC, type AppInfo, type SerialPortInfo } from "../shared/ipc.js";
+import { readFile, writeFile, rename, mkdir } from "node:fs/promises";
+import { IPC, type AppInfo, type HistoryRecord, type SerialPortInfo } from "../shared/ipc.js";
+
+const HISTORY_CAP = 100;
+const historyFile = (): string => join(app.getPath("userData"), "garage-copilot-history.json");
+
+async function readHistory(): Promise<HistoryRecord[]> {
+  try {
+    const parsed = JSON.parse(await readFile(historyFile(), "utf8"));
+    return Array.isArray(parsed) ? (parsed as HistoryRecord[]) : [];
+  } catch {
+    // Missing or corrupt file → start fresh.
+    return [];
+  }
+}
+
+async function writeHistory(records: HistoryRecord[]): Promise<void> {
+  const file = historyFile();
+  await mkdir(app.getPath("userData"), { recursive: true });
+  const tmp = `${file}.tmp`;
+  await writeFile(tmp, JSON.stringify(records), "utf8");
+  await rename(tmp, file); // atomic replace
+}
 
 /** Resolve a path inside the app bundle (works unpacked and in a packaged .app). */
 const appPath = (...parts: string[]): string => join(app.getAppPath(), ...parts);
@@ -73,6 +95,20 @@ ipcMain.on(IPC.SerialChoose, (_event: IpcMainEvent, portId: string) => {
     pendingPortCallback(typeof portId === "string" ? portId : "");
     pendingPortCallback = null;
   }
+});
+
+ipcMain.handle(IPC.HistoryList, (): Promise<HistoryRecord[]> => readHistory());
+
+ipcMain.handle(IPC.HistorySave, async (_event, record: HistoryRecord): Promise<HistoryRecord[]> => {
+  const records = await readHistory();
+  records.unshift(record); // newest first
+  const capped = records.slice(0, HISTORY_CAP);
+  await writeHistory(capped);
+  return capped;
+});
+
+ipcMain.handle(IPC.HistoryClear, async (): Promise<void> => {
+  await writeHistory([]);
 });
 
 ipcMain.handle(IPC.AppInfo, (): AppInfo => ({

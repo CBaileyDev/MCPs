@@ -21,6 +21,17 @@ ipcMain.handle("app:info", () => ({
   platform: process.platform
 }));
 
+// In-memory history store (the real main.ts persists to disk).
+let history = [];
+ipcMain.handle("history:list", () => history);
+ipcMain.handle("history:save", (_e, record) => {
+  history.unshift(record);
+  return history;
+});
+ipcMain.handle("history:clear", () => {
+  history = [];
+});
+
 app
   .whenReady()
   .then(async () => {
@@ -64,6 +75,11 @@ app
       await sleep(100);
       const fdText = document.getElementById('result-fd').textContent || '';
 
+      // 4) History: the scan auto-saves; open the tab and confirm it shows.
+      document.querySelector('[data-tab="history"]').click();
+      await sleep(300);
+      const historyText = document.getElementById('history-list').textContent || '';
+
       return {
         pill: pill.textContent,
         pillClass: pill.className,
@@ -72,6 +88,7 @@ app
         scanHasVin: scanText.includes('1HGBH41JXMN109186'),
         scanHasRpm: /Engine RPM/.test(scanText),
         fdHasRpm: fdText.includes('2480') || /RPM/i.test(fdText),
+        historyHasEntry: /MIL ON|DTC/.test(historyText),
         errors
       };
     })()`);
@@ -85,6 +102,7 @@ app
     if (!result.scanHasVin) failures.push("Scan output missing VIN");
     if (!result.scanHasRpm) failures.push("Scan output missing live RPM");
     if (!result.fdHasRpm) failures.push("Tune advisor produced no result");
+    if (!result.historyHasEntry) failures.push("History did not record the scan");
     if (Array.isArray(result.errors) && result.errors.length) failures.push("renderer errors: " + result.errors.join("; "));
 
     if (failures.length) {

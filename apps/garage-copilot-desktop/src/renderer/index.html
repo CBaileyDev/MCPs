@@ -36,6 +36,7 @@
         <button class="tab tab--active" data-tab="diagnose">Diagnose</button>
         <button class="tab" data-tab="live">Live Monitor</button>
         <button class="tab" data-tab="tune">Tune Advisor</button>
+        <button class="tab" data-tab="history">History</button>
         <button class="tab" data-tab="about">About</button>
       </nav>
 
@@ -98,6 +99,22 @@
               <button id="btn-load" class="primary">Assess</button>
               <div id="result-load" class="result"></div>
             </div>
+          </div>
+        </section>
+
+        <!-- History -->
+        <section id="tab-history" class="panel" hidden>
+          <div class="panel-head">
+            <h2>Scan History</h2>
+            <div>
+              <button id="btn-history-refresh" class="ghost">Refresh</button>
+              <button id="btn-history-clear" class="ghost">Clear</button>
+            </div>
+          </div>
+          <p class="muted">Every diagnostic scan is saved automatically so you can track this vehicle over time.</p>
+          <div class="history-layout">
+            <ul id="history-list" class="history-list"></ul>
+            <div id="history-detail" class="output"></div>
           </div>
         </section>
 

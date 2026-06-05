@@ -18,6 +18,16 @@ ipcMain.handle("app:info", () => ({
   platform: "darwin"
 }));
 
+let history = [];
+ipcMain.handle("history:list", () => history);
+ipcMain.handle("history:save", (_e, record) => {
+  history.unshift(record);
+  return history;
+});
+ipcMain.handle("history:clear", () => {
+  history = [];
+});
+
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function capture(win, name) {
@@ -68,6 +78,11 @@ app
     );
     await sleep(400);
     await capture(win, "tune.png");
+
+    // History — the scan auto-saved; show the saved-scan list + detail.
+    await win.webContents.executeJavaScript(`document.querySelector('[data-tab="history"]').click();`);
+    await sleep(500);
+    await capture(win, "history.png");
 
     app.exit(0);
   })
