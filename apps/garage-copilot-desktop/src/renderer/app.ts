@@ -51,13 +51,22 @@ const LIVE_SAMPLES_MAX = 4000;
 const adapterLog: string[] = [];
 const LOG_MAX = 240;
 
+let logRenderScheduled = false;
 function logTransaction(command: string, response: string[]): void {
   adapterLog.push(`> ${command}`);
   adapterLog.push(`< ${response.join(" | ") || "(no data)"}`);
   while (adapterLog.length > LOG_MAX) adapterLog.shift();
-  const pre = $("adapter-log");
-  pre.textContent = adapterLog.join("\n");
-  pre.scrollTop = pre.scrollHeight;
+  // Coalesce DOM writes to one per frame so heavy serial traffic (8 reads/s
+  // during live polling) doesn't thrash layout.
+  if (!logRenderScheduled) {
+    logRenderScheduled = true;
+    requestAnimationFrame(() => {
+      logRenderScheduled = false;
+      const pre = $("adapter-log");
+      pre.textContent = adapterLog.join("\n");
+      pre.scrollTop = pre.scrollHeight;
+    });
+  }
 }
 
 // ---- status / connection ----------------------------------------------------

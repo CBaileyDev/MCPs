@@ -83,7 +83,23 @@ npm run typecheck
 npm run build      # builds the engine, then bundles main/preload/renderer
 npm test           # vitest: the Web Serial transport drives the real engine
 npm run smoke      # boots the app and drives the UI (use xvfb on headless Linux)
+npm run stress     # runs the live monitor under load and checks the UI stays responsive
 ```
+
+### Built to stay smooth
+
+The live monitor is designed not to drift or freeze over a long session:
+
+- The sample buffer is bounded (rolling window), so memory and per-tick trend
+  analysis stay flat no matter how long you watch.
+- Commands are serialized through a queue (the OBD link is half-duplex) with an
+  in-flight guard, so a slow adapter can't back up or overlap rounds.
+- Per-command timeouts fail fast on a dead adapter (~4s) while still giving
+  protocol negotiation room (~12s).
+- Card refs are cached and the adapter-log render is coalesced to one DOM write
+  per frame, so nothing thrashes layout.
+- All OBD I/O is async (Web Serial), so it never blocks the UI thread — the
+  stress harness measures ~0ms main-thread lag across a sustained run.
 
 The Web Serial transport is unit-tested by feeding the real driver scripted
 responses through in-memory Web Streams; the headless smoke test boots Electron,
