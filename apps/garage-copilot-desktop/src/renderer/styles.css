@@ -849,6 +849,41 @@ h3 {
   text-align: left;
 }
 
+/* ---- VIN checker ---------------------------------------------------------- */
+.vin-bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.vin-input {
+  flex: 1;
+  min-width: 260px;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 10px 12px;
+  color: var(--text);
+  background: var(--surface-3);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-sm);
+}
+.vin-input:focus {
+  border-color: var(--accent);
+}
+.vin-input::placeholder {
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--dim);
+}
+.vin-hint {
+  font-size: 12px;
+  margin: 0 0 14px;
+  max-width: 720px;
+}
+
 /* ---- Accessibility -------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   *,

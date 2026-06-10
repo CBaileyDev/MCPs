@@ -32,6 +32,13 @@ supports and shows those (no wasted polls on unsupported parameters):
 
 ![History](./assets/screenshots/history.png)
 
+**VIN Checker** — validate any VIN (format + North-American check digit) and decode
+its structure (country, model year, plant) entirely offline; the car's VIN auto-fills
+after a scan. An optional one-click **online lookup** queries NHTSA's vPIC API for the
+full make/model/engine.
+
+![VIN Checker](./assets/screenshots/vin.png)
+
 There's also a **Metric / Imperial** units toggle (°C↔°F, km/h↔mph, kPa↔psi, …)
 that applies across the report, live gauges, and saved scans.
 
@@ -109,7 +116,8 @@ The app follows the Electron security checklist and is locked to its single job
   off, and `webSecurity` / `allowRunningInsecureContent` / `experimentalFeatures`
   pinned explicitly so a future Electron default can't weaken them.
 - **CSP** — set both as a `<meta>` and as a response header; everything is
-  `'self'` and `connect-src 'none'` (the renderer makes no network requests).
+  `'self'`. The only outbound exception is `connect-src https://vpic.nhtsa.dot.gov`
+  for the opt-in VIN lookup — no other network access is possible.
 - **No drifting** — `will-navigate` / `will-redirect` are blocked, and external
   links open in the OS browser only if they pass a strict https allowlist
   (rejects `http:`, embedded credentials, and look-alike hosts).

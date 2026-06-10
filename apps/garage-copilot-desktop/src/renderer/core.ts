@@ -18,6 +18,8 @@ export {
   assessAddedElectricalLoad
 } from "../../../garage-copilot/dist/tune/advisor.js";
 export { PID_FORMULAS } from "../../../garage-copilot/dist/obd/pid-formulas.js";
+export { decodeVin } from "../../../garage-copilot/dist/obd/vin-decode.js";
+export type { VinDecode } from "../../../garage-copilot/dist/obd/vin-decode.js";
 export { convertUnit } from "../../../garage-copilot/dist/obd/units.js";
 export type { UnitSystem } from "../../../garage-copilot/dist/obd/units.js";
 
